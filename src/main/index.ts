@@ -136,10 +136,10 @@ app.whenReady().then(async () => {
   // 打印一次接入信息，方便直接复制给 codex
   try {
     const port = await discoverCdpPort(8000)
-    console.log(`\n[mib] CDP 端口: ${port}`)
-    console.log(`[mib] Agent Bridge: http://127.0.0.1:${bridgePort()}/info`)
-    console.log(`[mib] 发现文件: ${bridgeFilePath()}`)
-    console.log(`[mib] agent-browser: ${agentBrowserPath()}\n`)
+    console.log(`\n[personae] CDP 端口: ${port}`)
+    console.log(`[personae] Agent Bridge: http://127.0.0.1:${bridgePort()}/info`)
+    console.log(`[personae] 发现文件: ${bridgeFilePath()}`)
+    console.log(`[personae] agent-browser: ${agentBrowserPath()}\n`)
   } catch (err) {
     console.error('[main] CDP 端口发现失败:', err)
   }

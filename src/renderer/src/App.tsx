@@ -91,7 +91,7 @@ function App(): React.JSX.Element {
   return (
     <div className="wrap">
       <header>
-        <h1>多身份浏览器 · agent 可控</h1>
+        <h1>Personae · 多身份浏览器</h1>
         <p className="sub">
           每个身份 = 独立 <code>persist:</code> partition = 一个 BrowserWindow（CDP{' '}
           <code>type=page</code>），跳转限制在窗口内

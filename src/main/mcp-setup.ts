@@ -38,7 +38,11 @@ export type McpSetupInfo = {
   scriptExists: boolean
 }
 
-const SERVER_KEY = 'multi_identity_browser'
+const SERVER_KEY = 'personae'
+
+// 改名前用过的 key。安装时顺带清掉，否则 codex 里会残留一个指向
+// 旧可执行文件路径的孤儿段，两个 server 同时注册且旧的必然连不上。
+const LEGACY_SERVER_KEYS = ['multi_identity_browser', 'el_test_browser']
 
 /**
  * MCP 脚本的落盘位置。
@@ -137,7 +141,11 @@ export async function installCodexConfig(): Promise<{
       // 首次创建
     }
 
-    if (fileExists && existing.includes(block.trim())) {
+    // 当前段已是最新、且没有旧名残留时才算 unchanged。
+    // 不能只判断前者 —— 改名后用户的配置里往往「新段已写入 + 旧段还在」，
+    // 那种情况必须继续走下去把旧段清掉。
+    const hasLegacy = LEGACY_SERVER_KEYS.some((k) => existing.includes(`[mcp_servers.${k}]`))
+    if (fileExists && existing.includes(block.trim()) && !hasLegacy) {
       return { ok: true, path, action: 'unchanged' }
     }
 
@@ -147,26 +155,20 @@ export async function installCodexConfig(): Promise<{
       await copyFile(path, backup)
     }
 
-    let next: string
-    const header = `[mcp_servers.${SERVER_KEY}]`
+    // 先清掉改名前遗留的段，再写当前段。
+    // 不清的话 codex 里会同时注册两个 server，旧的那个指向已不存在的
+    // 可执行文件路径，每次启动都报连接失败。
+    let working = existing
+    for (const legacy of LEGACY_SERVER_KEYS) {
+      working = spliceTomlSection(working, legacy, null)
+    }
 
-    if (fileExists && existing.includes(header)) {
-      // 整段替换：从本 server 的 header 到下一个顶层 [ 段之前
-      const lines = existing.split('\n')
-      const start = lines.findIndex((l) => l.trim() === header)
-      let end = lines.length
-      for (let i = start + 1; i < lines.length; i++) {
-        const t = lines[i].trim()
-        // 下一个顶层段（排除本 server 自己的子表 [mcp_servers.multi_identity_browser.*]）
-        if (t.startsWith('[') && !t.startsWith(`[mcp_servers.${SERVER_KEY}`)) {
-          end = i
-          break
-        }
-      }
-      next = [...lines.slice(0, start), block, '', ...lines.slice(end)].join('\n')
+    let next: string
+    if (working.includes(`[mcp_servers.${SERVER_KEY}]`)) {
+      next = spliceTomlSection(working, SERVER_KEY, block)
     } else {
-      const sep = fileExists && existing.trim() ? '\n\n' : ''
-      next = `${existing.trimEnd()}${sep}${block}\n`
+      const sep = working.trim() ? '\n\n' : ''
+      next = `${working.trimEnd()}${sep}${block}\n`
     }
 
     await writeFile(path, next, 'utf8')
@@ -181,7 +183,39 @@ export async function installCodexConfig(): Promise<{
   }
 }
 
-/** 检查 codex 配置里是否已经装了本 server */
+/**
+ * 从 TOML 文本里摘掉某个 mcp_servers 段。
+ *
+ * 范围是「该段 header 到下一个顶层 [ 段之前」，其中要排除它自己的子表
+ * （形如 [mcp_servers.<key>.env]），否则会在 env 子表处提前截断，
+ * 留下半截配置。
+ *
+ * replacement 为 null 表示删除该段。
+ */
+function spliceTomlSection(raw: string, key: string, replacement: string | null): string {
+  const header = `[mcp_servers.${key}]`
+  if (!raw.includes(header)) return raw
+
+  const lines = raw.split('\n')
+  const start = lines.findIndex((l) => l.trim() === header)
+  if (start === -1) return raw
+
+  let end = lines.length
+  for (let i = start + 1; i < lines.length; i++) {
+    const t = lines[i].trim()
+    if (t.startsWith('[') && !t.startsWith(`[mcp_servers.${key}`)) {
+      end = i
+      break
+    }
+  }
+
+  const head = lines.slice(0, start)
+  const tail = lines.slice(end)
+  return replacement === null
+    ? [...head, ...tail].join('\n')
+    : [...head, replacement, '', ...tail].join('\n')
+}
+
 export async function isCodexConfigured(): Promise<boolean> {
   try {
     const raw = await readFile(codexConfigPath(), 'utf8')

@@ -1,8 +1,12 @@
 <p align="center">
-  <img src="design/logo/icon.svg" width="128" alt="multi-identity-browser">
+  <img src="design/logo/icon.svg" width="128" alt="Personae">
 </p>
 
-<h1 align="center">multi-identity-browser</h1>
+<h1 align="center">Personae</h1>
+
+<p align="center">
+  多身份隔离浏览器 · 每个身份都能被 AI agent 精确操控
+</p>
 
 一个 Electron 桌面浏览器，把「多账号隔离」和「让 AI agent 操作浏览器」这两件事拼在一起：
 
@@ -58,25 +62,25 @@ pnpm build:mac
 手动配置的话，macOS 上是：
 
 ```toml
-[mcp_servers.multi_identity_browser]
-command = "/Applications/MultiIdentityBrowser.app/Contents/MacOS/MultiIdentityBrowser"
-args = ["/Applications/MultiIdentityBrowser.app/Contents/Resources/mcp-server.mjs"]
+[mcp_servers.personae]
+command = "/Applications/Personae.app/Contents/MacOS/Personae"
+args = ["/Applications/Personae.app/Contents/Resources/mcp-server.mjs"]
 
-[mcp_servers.multi_identity_browser.env]
+[mcp_servers.personae.env]
 ELECTRON_RUN_AS_NODE = "1"
 ```
 
-注意 `Contents/MacOS/` 下的可执行文件名是 **`MultiIdentityBrowser`**（跟随 `productName`），不是 `multi-identity-browser`——`electron-builder` 的 `executableName` 只对 Windows 生效。
+注意 `Contents/MacOS/` 下的可执行文件名是 **`Personae`**（跟随 `productName`），不是 `personae`——`electron-builder` 的 `executableName` 只对 Windows 生效。
 
 `command` 指向 app 自己的二进制，配合 `ELECTRON_RUN_AS_NODE=1` 让它退化成纯 Node 运行时。**这样用户机器上不需要装 Node**（已实测：把 `PATH` 设为 `/usr/bin:/bin`，完整流程仍然跑通）。
 
 Claude Code：
 
 ```bash
-claude mcp add multi-identity-browser \
+claude mcp add personae \
   --env ELECTRON_RUN_AS_NODE=1 \
-  -- /Applications/MultiIdentityBrowser.app/Contents/MacOS/MultiIdentityBrowser \
-     /Applications/MultiIdentityBrowser.app/Contents/Resources/mcp-server.mjs
+  -- /Applications/Personae.app/Contents/MacOS/Personae \
+     /Applications/Personae.app/Contents/Resources/mcp-server.mjs
 ```
 
 ## MCP 工具
@@ -164,7 +168,7 @@ claude mcp add multi-identity-browser \
 
 **macOS 上不能简单地「不签名」。** 设 `identity: null` 会让 electron-builder 完全跳过签名，bundle 保留 Electron 原始的 adhoc 签名，但资源已被改过，签名与内容不匹配，app **静默拒绝启动**（无报错、无日志，`spctl` 报 `code has no resources but signature indicates they must be present`）。正确做法是 `identity: '-'` 做 adhoc 签名，并在 entitlements 里加 `com.apple.security.cs.disable-library-validation`（`entitlements` 和 `entitlementsInherit` 都要配，前者管主进程）。
 
-**打包后 userData 目录名跟 `package.json` 的 `name`，不是 `productName`。** 所以是 `multi-identity-browser` 而不是 `MultiIdentityBrowser`。而 `Contents/MacOS/` 下的可执行文件名反过来跟 `productName`（`executableName` 只对 Windows 生效）。这两个反着来，很容易写错路径。
+**打包后 userData 目录名跟 `package.json` 的 `name`，不是 `productName`。** 所以是 `personae` 而不是 `Personae`。而 `Contents/MacOS/` 下的可执行文件名反过来跟 `productName`（`executableName` 只对 Windows 生效）。这两个反着来，很容易写错路径。
 
 **`publish: generic` + 假 URL 会让打包在最后一步崩掉。** electron-builder 模板默认给的是 `provider: generic` + `url: https://example.com/auto-updates`。改成 `provider: github` 后，它会在打包末尾尝试推断 release channel，本地没有 owner/repo 上下文时直接抛 `TypeError: Cannot read properties of null (reading 'channel')` —— 包已经打好了，却以失败退出。本项目发布走 CI 里的 `gh release upload`，所以直接设 `publish: null`。
 

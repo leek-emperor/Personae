@@ -228,7 +228,7 @@ jobs:
           或者在终端里移除隔离属性：
 
           ```bash
-          xattr -dr com.apple.quarantine /Applications/MultiIdentityBrowser.app
+          xattr -dr com.apple.quarantine /Applications/Personae.app
           ```
 
           ### 接入 Codex / Claude Code

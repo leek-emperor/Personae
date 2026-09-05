@@ -1,5 +1,5 @@
-appId: io.github.multi-identity-browser
-productName: MultiIdentityBrowser
+appId: io.github.fengli.personae
+productName: Personae
 directories:
   buildResources: build
 files:
@@ -31,7 +31,7 @@ extraResources:
   - from: resources/bin
     to: bin
 win:
-  executableName: multi-identity-browser
+  executableName: personae
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

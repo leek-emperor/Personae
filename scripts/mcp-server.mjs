@@ -14,10 +14,10 @@
  *   · agent-browser：路径从 app 写出的 agent-bridge.json 里读，指向 resources/bin/
  *
  * 推荐用应用界面的「一键配置」写入 codex，等价的手工配置为：
- *   [mcp_servers.el_test_browser]
- *   command = "/Applications/MultiIdentityBrowser.app/Contents/MacOS/MultiIdentityBrowser"
- *   args = ["/Applications/MultiIdentityBrowser.app/Contents/Resources/mcp-server.mjs"]
- *   [mcp_servers.el_test_browser.env]
+ *   [mcp_servers.personae]
+ *   command = "/Applications/Personae.app/Contents/MacOS/Personae"
+ *   args = ["/Applications/Personae.app/Contents/Resources/mcp-server.mjs"]
+ *   [mcp_servers.personae.env]
  *   ELECTRON_RUN_AS_NODE = "1"
  */
 import { readFileSync, existsSync } from 'node:fs'
@@ -34,8 +34,15 @@ const PROTOCOL_VERSION = '2025-06-18'
 //
 // 候选目录名有多个：开发时 Electron 用 package.json 的 name，
 // 打包后用 electron-builder 的 productName，两者不同。
-// 逐个探测，取第一个存在的。
-const APP_NAME_CANDIDATES = ['MultiIdentityBrowser', 'multi-identity-browser', 'el-test']
+// 历史名字也留着，方便改名后仍能连上还在跑的旧版本。
+// 逐个探测，取第一个存在且进程存活的。
+const APP_NAME_CANDIDATES = [
+  'Personae',
+  'personae',
+  'MultiIdentityBrowser',
+  'multi-identity-browser',
+  'el-test'
+]
 
 function userDataBase() {
   return process.platform === 'darwin'
@@ -45,13 +52,19 @@ function userDataBase() {
       : process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
 }
 
+// 环境变量覆盖。PERSONAE_* 是当前前缀，MIB_* 是改名前的旧前缀，
+// 保留是为了不破坏已经写好的配置。
+function envOverride(name) {
+  return process.env[`PERSONAE_${name}`] || process.env[`MIB_${name}`]
+}
+
 function bridgeFile() {
-  if (process.env.MIB_BRIDGE_FILE) return process.env.MIB_BRIDGE_FILE
+  const explicit = envOverride('BRIDGE_FILE')
+  if (explicit) return explicit
 
   const base = userDataBase()
-  const names = process.env.MIB_APP_NAME
-    ? [process.env.MIB_APP_NAME, ...APP_NAME_CANDIDATES]
-    : APP_NAME_CANDIDATES
+  const custom = envOverride('APP_NAME')
+  const names = custom ? [custom, ...APP_NAME_CANDIDATES] : APP_NAME_CANDIDATES
 
   const found = []
   for (const n of names) {
@@ -92,7 +105,7 @@ function readBridge() {
         ...APP_NAME_CANDIDATES.map((n) => `  ${join(userDataBase(), n, 'agent-bridge.json')}`),
         ``,
         `请先启动应用，并至少打开一个身份窗口。`,
-        `若你的 userData 目录名不在上面，用 MIB_BRIDGE_FILE 指定完整路径。`
+        `若你的 userData 目录名不在上面，用 PERSONAE_BRIDGE_FILE 指定完整路径。`
       ].join('\n')
     )
   }
@@ -604,7 +617,7 @@ async function handle(req) {
     ok(id, {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: {} },
-      serverInfo: { name: 'multi-identity-browser', version: '0.1.0' }
+      serverInfo: { name: 'personae', version: '0.1.0' }
     })
     return
   }

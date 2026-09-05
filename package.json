@@ -1,10 +1,10 @@
 {
-  "name": "multi-identity-browser",
+  "name": "personae",
   "version": "0.1.0",
   "description": "Electron 多浏览器身份（partition 隔离）客户端，内置 agent-browser 并通过 MCP 暴露给 codex / claude code",
   "main": "./out/main/index.js",
-  "author": "",
-  "homepage": "",
+  "author": "fengli",
+  "homepage": "https://github.com/fengli/personae",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

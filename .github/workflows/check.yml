@@ -64,7 +64,7 @@ jobs:
         # 每次打包都确认一遍。
         run: |
           set -euo pipefail
-          APP="dist/mac-arm64/MultiIdentityBrowser.app/Contents/Resources"
+          APP="dist/mac-arm64/Personae.app/Contents/Resources"
           fail=0
           for p in "bin/darwin-arm64/agent-browser" "skills/core/SKILL.md" "mcp-server.mjs" "icon.icns"; do
             if [ -e "$APP/$p" ]; then
