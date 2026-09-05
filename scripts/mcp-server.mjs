@@ -32,9 +32,10 @@ const PROTOCOL_VERSION = '2025-06-18'
 // ── 发现运行中的 app ────────────────────────────────────────────────
 // app 每次启动端口都是随机的，通过固定路径的发现文件定位。
 //
-// 候选目录名有多个：开发时 Electron 用 package.json 的 name，
-// 打包后用 electron-builder 的 productName，两者不同。
-// 历史名字也留着，方便改名后仍能连上还在跑的旧版本。
+// 目录名取自 package.json 的 name（开发期）或 electron-builder 的
+// productName（打包后）—— 两者现在都是 Personae，但小写形式也留着：
+// macOS 文件系统不区分大小写，Linux 区分，历史目录可能是小写的。
+// 更早的项目名同样保留，方便改名后仍能连上还在跑的旧版本。
 // 逐个探测，取第一个存在且进程存活的。
 const APP_NAME_CANDIDATES = [
   'Personae',

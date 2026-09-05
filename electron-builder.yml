@@ -38,7 +38,7 @@ extraResources:
   - from: resources/bin
     to: bin
 win:
-  executableName: personae
+  executableName: Personae
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

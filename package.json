@@ -1,5 +1,5 @@
 {
-  "name": "personae",
+  "name": "Personae",
   "version": "0.1.0",
   "description": "A desktop browser where every identity is an isolated Chromium partition, and every window can be driven by AI agents (Codex / Claude Code) through MCP — no Node or CLI install required.",
   "main": "./out/main/index.js",

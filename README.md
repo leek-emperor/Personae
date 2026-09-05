@@ -78,7 +78,7 @@ args = ["/Applications/Personae.app/Contents/Resources/mcp-server.mjs"]
 ELECTRON_RUN_AS_NODE = "1"
 ```
 
-Note that the executable under `Contents/MacOS/` is **`Personae`** (it follows `productName`), not `personae` — `electron-builder`'s `executableName` only applies to Windows.
+The executable under `Contents/MacOS/` follows `productName`, so it's `Personae`. Note that `electron-builder`'s `executableName` only applies to Windows.
 
 `command` points at the app's own binary; `ELECTRON_RUN_AS_NODE=1` makes it degrade into a plain Node runtime. **That's why no Node install is required** (verified: with `PATH` set to `/usr/bin:/bin`, the full flow still works).
 
@@ -177,7 +177,7 @@ Setting the title also has a race: `about:blank` loads so fast that `did-finish-
 
 **On macOS you can't just "skip signing".** Setting `identity: null` makes electron-builder skip signing entirely; the bundle keeps Electron's original adhoc signature, but the resources have been modified, so signature and content disagree and the app **refuses to launch silently** (no error, no log; `spctl` reports `code has no resources but signature indicates they must be present`). The correct approach is `identity: '-'` for adhoc signing plus `com.apple.security.cs.disable-library-validation` in the entitlements — set both `entitlements` and `entitlementsInherit`, since the former covers the main process.
 
-**After packaging, the userData directory follows `package.json`'s `name`, not `productName`.** So it's `personae`, not `Personae`. Meanwhile the executable under `Contents/MacOS/` follows `productName` (`executableName` only applies to Windows). The two are inverted, which makes it very easy to look in the wrong place.
+**The userData directory follows `package.json`'s `name`, while the executable follows `productName`.** These are two different fields, and `executableName` only applies to Windows — so if they disagree, you will look in the wrong place. This project deliberately sets both to `Personae` to avoid that. (Watch out on Linux: its filesystem is case-sensitive, so a directory created under an older lowercase name won't be found.)
 
 **`publish: generic` with a placeholder URL crashes packaging at the very last step.** electron-builder's template ships `provider: generic` with `url: https://example.com/auto-updates`. Switching to `provider: github` makes it try to infer a release channel at the end of packaging, and without owner/repo context it throws `TypeError: Cannot read properties of null (reading 'channel')` — the build is already complete, yet it exits as a failure. This project publishes via `gh release upload` in CI, so `publish: null` it is.
 
