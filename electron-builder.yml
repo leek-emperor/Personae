@@ -1,4 +1,4 @@
-appId: io.github.fengli.personae
+appId: io.github.leekemperor.personae
 productName: Personae
 directories:
   buildResources: build
@@ -6,7 +6,14 @@ files:
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,README.zh-CN.md}'
+  # 设计源文件只用于生成图标，不需要进包
+  - '!design'
+  # 本地 agent / 编辑器工具配置。
+  # electron-builder 不读 .gitignore，所以即使这些目录没入库，
+  # 仍然会被打进 asar（实测 .agents/skills 下的 5 个文件都进了包）。
+  - '!{.agents,.claude,.cursor,.vscode}'
+  - '!skills-lock.json'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
@@ -72,7 +79,7 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: fengli <xingyuma.fengli@gmail.com>
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
