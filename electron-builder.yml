@@ -1,4 +1,4 @@
-appId: io.github.leekemperor.personae
+appId: io.github.leek-emperor.personae
 productName: Personae
 directories:
   buildResources: build
@@ -79,7 +79,7 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: fengli <xingyuma.fengli@gmail.com>
+  maintainer: fengli
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}

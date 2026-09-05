@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "description": "A desktop browser where every identity is an isolated Chromium partition, and every window can be driven by AI agents (Codex / Claude Code) through MCP — no Node or CLI install required.",
   "main": "./out/main/index.js",
-  "author": "fengli <xingyuma.fengli@gmail.com>",
-  "homepage": "https://github.com/leekemperor/personae",
+  "author": "fengli",
+  "homepage": "https://github.com/leek-emperor/Personae",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leekemperor/personae.git"
+    "url": "git+https://github.com/leek-emperor/Personae.git"
   },
   "bugs": {
-    "url": "https://github.com/leekemperor/personae/issues"
+    "url": "https://github.com/leek-emperor/Personae/issues"
   },
   "scripts": {
     "format": "prettier --write .",
