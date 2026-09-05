@@ -1,63 +1,352 @@
+/* ============================================================
+   Personae · 渲染进程样式
+   ------------------------------------------------------------
+   美学方向：技术控制台 / 接线台，而不是通用 SaaS 卡片流。
+   视觉主张全部来自 logo 的三条约束：
+     1. 每个身份一个专属色 —— 全篇最强的识别线索
+     2. 间隙即隔离 —— 身份之间靠留白和色条分隔，绝不重叠
+     3. 深蓝黑底 + 单色强调 —— 避开「白底紫渐变」那套烂大街配色
+   ============================================================ */
+
+/* ── 字体 ────────────────────────────────────────────────────
+   拉丁走自托管 woff2，中文交给系统 PingFang SC。
+   为什么不下中文字体：一个中文字重动辄 3~8 MB，而拉丁子集只要 34 KB；
+   而且 PingFang 在 macOS 上的渲染质量本来就比多数网络中文字体好。
+   为什么必须自托管：index.html 的 CSP 是 default-src 'self'，
+   外链 Google Fonts 会被直接拦掉。
+   两个文件都是可变字体（Google 对 400/600/700 返回同一个 URL），
+   所以 font-weight 写成范围。 */
+@font-face {
+  font-family: 'Archivo';
+  src: url('./fonts/archivo-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/jetbrainsmono-latin.woff2') format('woff2');
+  font-weight: 400 500;
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
 }
 
 :root {
-  --bg: #16181d;
-  --card: #1e2128;
-  --line: #2e323b;
-  --fg: #e6e8ec;
-  --dim: #8b919c;
-  --acc: #4f8cf7;
-  --ok: #3ecf8e;
-  --bad: #f2545b;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 底层：深蓝黑，带一点蓝紫倾向，和 logo 底板同源 */
+  --bg: #0b0e17;
+  --bg-2: #10141f;
+  --panel: #141926;
+  --panel-2: #1a2030;
+  --line: #232b3d;
+  --line-strong: #33405c;
+
+  --fg: #e8ecf4;
+  --fg-2: #aab4c8;
+  --dim: #6b7690;
+  --dim-2: #4d5670;
+
+  /* 强调色取自 logo 的三张卡片 */
+  --acc: #5b9cff;
+  --acc-deep: #3b82f6;
+  --ok: #2dd4a0;
+  --warn: #f5a524;
+  --bad: #f75f6b;
+  --violet: #a78bfa;
+
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans:
+    'Archivo', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+
+  --r: 10px;
+  --r-lg: 14px;
+}
+
+/* 身份色的真实来源是 src/shared/colors.ts —— 主进程和渲染进程都从那里取，
+   所以两端算出的颜色必然一致（跨窗口靠颜色认身份就是靠这个）。
+   身份卡片的颜色由 JS 以内联 --idc 注入，不走下面这些变量；
+   这里保留一份同值副本，供不经过 JS 的静态样式（如页头那三张小卡片）使用。
+   改色时两处必须一起改。 */
+:root {
+  --id-0: #5b9cff;
+  --id-1: #2dd4a0;
+  --id-2: #a78bfa;
+  --id-3: #fbbf5c;
+  --id-4: #f472b6;
+  --id-5: #38d0e8;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font:
-    14px/1.6 -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    'PingFang SC',
-    sans-serif;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 背景氛围：两团极淡的辉光 + 全局网格。
+   fixed 定位所以滚动时纹理不动，页面像是"贴"在一块背板上。
+   透明度压得很低（0.05 以下），目的是让大面积深色不死板，
+   而不是让人看见网格 —— 一眼能注意到就说明太重了。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 78% 52% at 12% -8%, rgba(91, 156, 255, 0.13), transparent 62%),
+    radial-gradient(ellipse 62% 46% at 92% 4%, rgba(167, 139, 250, 0.1), transparent 60%);
+  z-index: 0;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(120, 145, 200, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 145, 200, 0.045) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 92% 70% at 50% 0%, #000 35%, transparent 78%);
+  z-index: 0;
 }
 
 .wrap {
-  max-width: 940px;
+  position: relative;
+  z-index: 1;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 28px 22px 60px;
+  padding: 34px 26px 72px;
 }
 
-header h1 {
-  font-size: 21px;
-  margin: 0 0 6px;
+/* ── 页头 ──────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 26px;
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-header .sub {
-  margin: 0 0 22px;
+/* 用 CSS 复刻 logo 的三张阶梯卡片。
+   不直接用 icon.svg 是因为这里要的是「示意」而非图标：
+   尺寸小、需要跟随 hover 动、且要和标题基线对齐。 */
+.brand-mark {
+  position: relative;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #232a42, #11141e);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.brand-mark i {
+  position: absolute;
+  left: 9px;
+  height: 8px;
+  width: 22px;
+  border-radius: 3px;
+  display: block;
+}
+
+.brand-mark i:nth-child(1) {
+  top: 10px;
+  background: var(--id-2);
+  opacity: 0.62;
+}
+
+.brand-mark i:nth-child(2) {
+  top: 21px;
+  left: 12px;
+  background: var(--id-1);
+  opacity: 0.82;
+}
+
+.brand-mark i:nth-child(3) {
+  top: 32px;
+  left: 15px;
+  background: var(--id-0);
+}
+
+.masthead h1 {
+  font-size: 25px;
+  line-height: 1.15;
+  margin: 0 0 5px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+
+.masthead h1 em {
+  font-style: normal;
   color: var(--dim);
-  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
 }
+
+.masthead .sub {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 12.5px;
+  line-height: 1.65;
+  max-width: 70ch;
+}
+
+/* ── 顶部状态条 ─────────────────────────────────────────────
+   把 CDP 端口、bridge、捆绑状态这类「一眼要知道」的信息拎出来，
+   不必展开卡片就能确认系统是否就绪。 */
+
+.statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: linear-gradient(180deg, var(--panel), var(--bg-2));
+  margin-bottom: 22px;
+  overflow: hidden;
+  animation: rise 0.5s 0.05s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.stat {
+  flex: 1 1 150px;
+  padding: 11px 15px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.stat:last-child {
+  border-right: 0;
+}
+
+.stat b {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+
+.stat span {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--fg);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 活体指示灯：只在系统真正就绪时才呼吸，
+   所以它的动画本身就是状态信息，不是装饰。 */
+.pulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  margin-right: 6px;
+  vertical-align: 1px;
+  box-shadow: 0 0 0 0 rgba(45, 212, 160, 0.55);
+  animation: breathe 2.4s ease-out infinite;
+}
+
+.pulse.off {
+  background: var(--bad);
+  animation: none;
+  box-shadow: none;
+}
+
+@keyframes breathe {
+  0% {
+    box-shadow: 0 0 0 0 rgba(45, 212, 160, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(45, 212, 160, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(45, 212, 160, 0);
+  }
+}
+
+/* ── 面板 ──────────────────────────────────────────────────── */
 
 .card {
-  background: var(--card);
+  position: relative;
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
   margin-bottom: 16px;
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.card h2 {
-  font-size: 14px;
-  margin: 0 0 12px;
-  color: var(--dim);
+/* 逐个错开入场。用 nth-of-type 而不是 JS 传 index，
+   省一层无意义的 props 传递。 */
+.card:nth-of-type(1) {
+  animation-delay: 0.1s;
+}
+.card:nth-of-type(2) {
+  animation-delay: 0.16s;
+}
+.card:nth-of-type(3) {
+  animation-delay: 0.22s;
+}
+.card:nth-of-type(4) {
+  animation-delay: 0.28s;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.card > h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10.5px;
+  margin: 0 0 14px;
+  color: var(--fg-2);
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+/* 标题后面拖一条渐隐横线，把每个区块的起点标清楚 */
+.card > h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line-strong), transparent);
+}
+
+.card > h2 .count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+  letter-spacing: 0;
 }
 
 .row {
@@ -67,63 +356,115 @@ header .sub {
   flex-wrap: wrap;
 }
 
+/* ── 控件 ──────────────────────────────────────────────────── */
+
 input {
-  background: #14161a;
+  background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--fg);
-  padding: 8px 10px;
+  padding: 9px 12px;
   font-size: 13px;
+  font-family: inherit;
   flex: 1;
-  min-width: 140px;
+  min-width: 150px;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s;
+}
+
+input::placeholder {
+  color: var(--dim-2);
 }
 
 input:focus {
   outline: none;
   border-color: var(--acc);
+  box-shadow: 0 0 0 3px rgba(91, 156, 255, 0.14);
 }
 
 button {
-  background: #2a2e37;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
   color: var(--fg);
-  padding: 7px 13px;
-  font-size: 13px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-family: inherit;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background 0.16s,
+    border-color 0.16s,
+    transform 0.1s;
 }
 
 button:hover:not(:disabled) {
-  border-color: #4a505c;
+  background: #222a3d;
+  border-color: #3f4d6d;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button:disabled {
-  opacity: 0.4;
+  opacity: 0.36;
   cursor: not-allowed;
 }
 
 button.primary {
-  background: var(--acc);
-  border-color: var(--acc);
+  background: linear-gradient(180deg, var(--acc), var(--acc-deep));
+  border-color: #2f6fd0;
   color: #fff;
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #6ea9ff, #4189f8);
+  border-color: #3f7fdd;
 }
 
 button.danger {
   color: var(--bad);
+  border-color: #4a2a33;
 }
+
+button.danger:hover:not(:disabled) {
+  background: #2c1a20;
+  border-color: #6d3742;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--fg-2);
+}
+
+button.ghost:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--line-strong);
+  background: var(--panel-2);
+}
+
+/* ── 代码与键值 ─────────────────────────────────────────────── */
 
 code {
   font-family: var(--mono);
-  font-size: 12px;
-  background: #14161a;
-  padding: 1px 5px;
+  font-size: 11.5px;
+  background: rgba(120, 145, 200, 0.09);
+  padding: 1.5px 5px;
   border-radius: 4px;
+  color: #cbd5e8;
 }
 
 code.path {
-  font-size: 11px;
+  font-size: 10.5px;
   word-break: break-all;
+  background: none;
+  padding: 0;
+  color: var(--fg-2);
 }
 
 table.kv {
@@ -136,19 +477,20 @@ table.kv th {
   text-align: left;
   color: var(--dim);
   font-weight: 500;
-  width: 106px;
-  padding: 3px 0;
+  width: 112px;
+  padding: 4px 0;
   vertical-align: top;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 table.kv td {
-  padding: 3px 0;
+  padding: 4px 0;
+  min-width: 0;
 }
 
 table.kv.small th,
 table.kv.small td {
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .dim {
@@ -165,60 +507,99 @@ table.kv.small td {
 
 .hint {
   font-size: 12.5px;
-  color: var(--dim);
-  margin: 0 0 12px;
-  line-height: 1.7;
+  color: var(--fg-2);
+  margin: 0 0 14px;
+  line-height: 1.75;
 }
 
 .hint strong {
   color: var(--fg);
+  font-weight: 600;
 }
 
 .note {
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 6px;
+  margin-top: 12px;
+  padding: 9px 13px;
+  border-radius: 8px;
   font-size: 12.5px;
+  border-left: 2px solid;
 }
 
 .note.ok {
-  background: #17301f;
-  border: 1px solid #2f5a3c;
-  color: #9fe3b8;
+  background: rgba(45, 212, 160, 0.09);
+  border-color: var(--ok);
+  color: #93e7c8;
 }
 
 .note.bad-note {
-  background: #3a1d20;
-  border: 1px solid #5c2a2f;
-  color: #ffb4b8;
+  background: rgba(247, 95, 107, 0.09);
+  border-color: var(--bad);
+  color: #ffadb4;
 }
 
 .err {
-  background: #3a1d20;
-  border: 1px solid #5c2a2f;
-  color: #ffb4b8;
-  padding: 10px 14px;
+  background: rgba(247, 95, 107, 0.1);
+  border: 1px solid #4a2a33;
+  border-left: 2px solid var(--bad);
+  color: #ffadb4;
+  padding: 11px 15px;
   border-radius: 8px;
   margin-bottom: 16px;
-  font-size: 13px;
-  word-break: break-all;
+  font-size: 12.5px;
+  word-break: break-word;
+  animation: rise 0.3s both;
 }
+
+/* ── 身份卡片 ───────────────────────────────────────────────
+   核心视觉：左侧 3px 色条 = 该身份的专属色。
+   卡片之间留 12px 间隙且绝不重叠 —— 呼应 logo 的设计意图，
+   间隙本身就在表达「这些身份互相隔离」。 */
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .item {
+  position: relative;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px 14px;
-  background: #191c22;
+  border-radius: var(--r);
+  padding: 14px 16px 14px 18px;
+  background: linear-gradient(100deg, var(--panel-2), var(--panel) 42%);
+  overflow: hidden;
+  transition:
+    border-color 0.18s,
+    transform 0.18s;
+}
+
+.item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--idc, var(--dim-2));
+  opacity: 0.5;
+  transition: opacity 0.18s;
+}
+
+.item:hover {
+  border-color: var(--line-strong);
+  transform: translateX(2px);
+}
+
+/* 已打开 = 色条全亮 + 一层同色内辉光。
+   状态差异靠饱和度而非换色，这样「哪个身份」和「开没开」
+   两个维度不会互相干扰。 */
+.item.open::before {
+  opacity: 1;
 }
 
 .item.open {
-  border-color: #2f4a3c;
+  border-color: color-mix(in srgb, var(--idc) 32%, var(--line));
+  box-shadow: inset 22px 0 42px -34px var(--idc);
 }
 
 .item-head {
@@ -226,52 +607,221 @@ table.kv.small td {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
+.id-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+/* 身份色点。已打开时加一圈同色光环，和状态条的 pulse 呼应。 */
 .dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #4a505c;
-  margin-right: 7px;
+  background: var(--idc, var(--dim-2));
+  opacity: 0.45;
+  transition: opacity 0.18s;
 }
 
 .dot.on {
-  background: var(--ok);
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--idc) 22%, transparent);
 }
 
-.ellip {
-  max-width: 560px;
+.id-name strong {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 状态徽章。未打开时用中性灰，打开后穿上身份色。 */
+.badge {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2.5px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.badge.on {
+  color: var(--idc);
+  border-color: color-mix(in srgb, var(--idc) 42%, transparent);
+  background: color-mix(in srgb, var(--idc) 11%, transparent);
+}
+
+.ellip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 折叠区 ────────────────────────────────────────────────── */
+
 details {
-  margin-top: 8px;
+  margin-top: 10px;
   border-top: 1px solid var(--line);
-  padding-top: 8px;
+  padding-top: 10px;
 }
 
 summary {
   cursor: pointer;
   color: var(--acc);
-  font-size: 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.16s;
+  user-select: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::before {
+  content: '▸';
+  font-size: 9px;
+  transition: transform 0.18s;
+  display: inline-block;
+}
+
+details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+summary:hover {
+  color: #85b4ff;
 }
 
 pre.cmd,
 pre.targets {
-  background: #101216;
+  background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 12px 14px;
   font-family: var(--mono);
-  font-size: 11.5px;
-  line-height: 1.7;
+  font-size: 11px;
+  line-height: 1.75;
   overflow-x: auto;
-  margin: 8px 0 0;
-  color: #cfd4dc;
+  margin: 9px 0 0;
+  color: #b8c4dc;
+  /* 长命令不硬换行，保留可复制的原样格式 */
+  white-space: pre;
+}
+
+/* ── Agent 接入面板 ─────────────────────────────────────────
+   本项目最独特的部分：一段可直接粘给 codex/claude 的 prompt。
+   给它单独的视觉待遇 —— 紫色调，和身份卡的蓝绿区分开。 */
+
+.agent-block {
+  border: 1px solid #2b2a48;
+  border-left: 2px solid var(--violet);
+  border-radius: var(--r);
+  background: linear-gradient(100deg, rgba(167, 139, 250, 0.07), transparent 58%);
+  padding: 13px 15px;
+  margin-top: 12px;
+}
+
+.agent-block h3 {
+  font-size: 12.5px;
+  margin: 0 0 5px;
+  font-weight: 600;
+  color: #d3c6ff;
+}
+
+.agent-block p {
+  margin: 0 0 11px;
+  font-size: 12px;
+  color: var(--fg-2);
+  line-height: 1.7;
+}
+
+pre.prompt {
+  background: var(--bg);
+  border: 1px solid #2b2a48;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: #c3c8dc;
+  margin: 0 0 10px;
+  max-height: 230px;
+  overflow: auto;
+  /* prompt 是给人读的散文，允许换行 */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 复制成功的瞬时反馈。不用 alert，也不占布局。 */
+.copied {
+  color: var(--ok);
+  font-size: 11.5px;
+  margin-left: 2px;
+  animation: fade 0.25s both;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── 空状态 ────────────────────────────────────────────────── */
+
+.empty {
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--dim);
+  font-size: 12.5px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r);
+  background: rgba(120, 145, 200, 0.02);
+}
+
+.empty b {
+  display: block;
+  color: var(--fg-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* 尊重系统的减少动效偏好。
+   入场动画是纯装饰，关掉不影响任何功能；
+   但 pulse 承载状态语义，只减速不取消。 */
+@media (prefers-reduced-motion: reduce) {
+  .masthead,
+  .statusbar,
+  .card,
+  .err {
+    animation: none;
+  }
+
+  .item:hover {
+    transform: none;
+  }
+
+  .pulse {
+    animation-duration: 6s;
+  }
 }

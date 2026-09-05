@@ -65,9 +65,19 @@ pnpm build:mac
 
 ## Connecting Codex / Claude Code
 
-The UI has a "Connect Codex / Claude Code" panel. One click writes the MCP server into `~/.codex/config.toml` (idempotent, with an automatic backup first). **Prefer this** — paths are resolved at runtime from `process.execPath`, so they can't be wrong.
+### The fastest path: let the agent connect itself
 
-To configure it by hand on macOS:
+The UI has a **"Let the agent connect itself"** block that renders a ready-to-send prompt. Copy it, paste it into Codex or Claude Code, and the agent will write its own MCP config, restart, and verify the link by calling `list_identities`.
+
+The prompt isn't just a config snippet — it also tells the agent what the 13 tools do and which mistakes to avoid (stale refs, guessing at `agent-browser` syntax, trying to tell identities apart by page title). It's generated from live runtime values, so the paths in it are always correct for the machine it's running on.
+
+### Or click one button
+
+The same panel has a one-click install that writes the MCP server into `~/.codex/config.toml` (idempotent, with an automatic backup first). Paths are resolved at runtime from `process.execPath`, so they can't be wrong.
+
+### Or configure it by hand
+
+On macOS:
 
 ```toml
 [mcp_servers.personae]
@@ -206,12 +216,18 @@ src/main/
   agent-bridge.ts local HTTP bridge + discovery file
   mcp-setup.ts    one-click Codex configuration
   index.ts        main entry and IPC registration
+src/shared/
+  colors.ts       identity palette — imported by BOTH main and renderer,
+                  so a window's top-bar dot always matches its list entry
 src/preload/
   index.ts        main-window API
   chrome.ts       top-bar preload (navigation methods only)
 src/renderer/
   chrome.html     navigation-bar UI
   src/App.tsx     identity management and connection panel
+  src/agent-prompt.ts    builds the copy-and-paste prompt for agents
+  src/assets/fonts/      self-hosted latin subsets (the CSP blocks
+                         external font CDNs; CJK falls back to the system)
 scripts/
   mcp-server.mjs           MCP server (stdio JSON-RPC)
   bundle-agent-browser.mjs bundles the binary and core skill

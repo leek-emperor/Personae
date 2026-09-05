@@ -65,9 +65,19 @@ pnpm build:mac
 
 ## 接入 Codex / Claude Code
 
-界面上有「接入 Codex / Claude Code」面板，点一次「一键配置」就会把 MCP server 写进 `~/.codex/config.toml`（幂等，写入前自动备份）。**推荐用它**——路径是运行时从 `process.execPath` 取的，不会写错。
+### 最省事：让 agent 自己接
 
-手动配置的话，macOS 上是：
+界面上有一块**「让 agent 自己接入」**，里面是一段现成的 prompt。复制它，粘给 Codex 或 Claude Code，agent 会自己写配置、重启、然后调 `list_identities` 验证链路通不通。
+
+这段 prompt 不只是配置片段，它还告诉 agent 那 13 个工具分别能干什么、以及哪些坑别踩（ref 跨调用失效、凭记忆猜 agent-browser 语法、靠页面标题区分身份）。内容由运行时的真实值生成，所以里面的路径在当前机器上一定是对的。
+
+### 或者点一下按钮
+
+同一个面板里有「一键配置 Codex」，会把 MCP server 写进 `~/.codex/config.toml`（幂等，写入前自动备份）。路径是运行时从 `process.execPath` 取的，不会写错。
+
+### 或者手动配
+
+macOS 上是：
 
 ```toml
 [mcp_servers.personae]
@@ -205,12 +215,18 @@ src/main/
   agent-bridge.ts 本地 HTTP bridge + 发现文件
   mcp-setup.ts    Codex 配置一键写入
   index.ts        主进程入口与 IPC 注册
+src/shared/
+  colors.ts       身份色板 —— 主进程和渲染进程都从这里取，
+                  所以窗口顶栏的色点和列表里的颜色一定一致
 src/preload/
   index.ts        主界面 API
   chrome.ts       顶栏专用 preload（只暴露导航方法）
 src/renderer/
   chrome.html     导航栏 UI
   src/App.tsx     身份管理与接入面板
+  src/agent-prompt.ts    生成那段可直接粘给 agent 的 prompt
+  src/assets/fonts/      自托管的拉丁子集字体（CSP 挡掉了外部字体 CDN，
+                         中文回退到系统 PingFang）
 scripts/
   mcp-server.mjs           MCP server（stdio JSON-RPC）
   bundle-agent-browser.mjs 捆绑二进制与 core skill

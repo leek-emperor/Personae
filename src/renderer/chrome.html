@@ -8,14 +8,19 @@
     />
     <title>导航栏</title>
     <style>
+      /* 顶栏视觉与主界面同源：深蓝黑底、同一套强调色。
+         注意这里不能用主界面那两个 woff2 —— 顶栏是独立文档，
+         再各自加载一份字体不划算，而且导航栏内容以中文和符号为主，
+         系统字体已经够好。 */
       :root {
         --h: 44px;
-        --bg: #2b2d31;
-        --bg2: #1e2024;
-        --fg: #e6e8eb;
-        --dim: #8b9099;
-        --line: #3a3d43;
-        --accent: #4a9eff;
+        --bg: #141926;
+        --bg2: #0b0e17;
+        --fg: #e8ecf4;
+        --dim: #6b7690;
+        --line: #232b3d;
+        --line-2: #33405c;
+        --accent: #5b9cff;
       }
       * {
         box-sizing: border-box;
@@ -26,25 +31,25 @@
         height: var(--h);
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 0 8px;
-        background: var(--bg);
+        gap: 5px;
+        padding: 0 9px;
+        background: linear-gradient(180deg, #182032, var(--bg));
         border-bottom: 1px solid var(--line);
         font:
           13px -apple-system,
           BlinkMacSystemFont,
-          'Segoe UI',
+          'PingFang SC',
           sans-serif;
         color: var(--fg);
         user-select: none;
         overflow: hidden;
       }
       button {
-        width: 30px;
-        height: 30px;
+        width: 29px;
+        height: 29px;
         flex: 0 0 auto;
         border: 0;
-        border-radius: 6px;
+        border-radius: 7px;
         background: transparent;
         color: var(--fg);
         font-size: 15px;
@@ -52,57 +57,105 @@
         cursor: pointer;
         display: grid;
         place-items: center;
-        transition: background 0.12s;
+        transition:
+          background 0.13s,
+          color 0.13s;
       }
       button:hover:not(:disabled) {
-        background: #3a3d43;
+        background: #222a3d;
       }
       button:active:not(:disabled) {
-        background: #45484f;
+        background: #2a3350;
       }
       button:disabled {
-        color: #55585f;
+        color: #39415a;
         cursor: default;
       }
+      /* 地址栏。聚焦时描边 + 外发光，和主界面 input 一致的反馈语言。 */
       #url {
         flex: 1 1 auto;
         min-width: 0;
         height: 30px;
-        padding: 0 12px;
-        border: 1px solid transparent;
+        padding: 0 13px;
+        border: 1px solid var(--line);
         border-radius: 15px;
         background: var(--bg2);
         color: var(--fg);
         font-size: 12.5px;
         outline: none;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      #url::placeholder {
+        color: #4d5670;
       }
       #url:focus {
         border-color: var(--accent);
-        background: #16181c;
+        box-shadow: 0 0 0 3px rgba(91, 156, 255, 0.15);
       }
+      /* 身份徽章：左侧一个色点 + 名称。
+         色点颜色由主进程推来的 identityColor 决定，和主界面列表里
+         同一身份的颜色一致 —— 用户在多个窗口之间切换时靠颜色就能认出
+         "我现在在哪个身份里"，不必去读文字。 */
       #badge {
         flex: 0 0 auto;
-        max-width: 150px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 170px;
+        padding: 4px 11px 4px 9px;
+        border-radius: 15px;
+        background: #1b2233;
+        border: 1px solid var(--line-2);
+        font-size: 11.5px;
+        color: var(--dim);
+      }
+      #badge.hidden {
+        display: none;
+      }
+      #dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex: 0 0 auto;
+      }
+      #who {
+        color: var(--fg);
+        font-weight: 600;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        padding: 4px 10px;
-        border-radius: 11px;
-        background: #343841;
-        color: var(--dim);
-        font-size: 11.5px;
       }
-      #badge b {
-        color: var(--fg);
-        font-weight: 600;
+      /* 加载进度条：贴在顶栏底边，宽度靠 CSS 动画推进。
+         没法拿到真实进度，所以做成"先快后慢"逼近 90% 的假进度 ——
+         这是浏览器通用做法，比无限旋转更能传达"在动"。 */
+      #bar {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        height: 2px;
+        width: 0;
+        background: linear-gradient(90deg, var(--accent), #a78bfa);
+        opacity: 0;
+        transition:
+          width 0.25s ease-out,
+          opacity 0.2s;
       }
-      .spin {
-        animation: sp 0.8s linear infinite;
+      #bar.on {
+        opacity: 1;
+        width: 88%;
+        transition:
+          width 9s cubic-bezier(0.08, 0.82, 0.17, 1),
+          opacity 0.2s;
       }
-      @keyframes sp {
-        to {
-          transform: rotate(360deg);
-        }
+      #bar.done {
+        width: 100%;
+        opacity: 0;
+        transition:
+          width 0.18s,
+          opacity 0.35s 0.12s;
       }
     </style>
   </head>
@@ -112,7 +165,8 @@
     <button id="reload" title="刷新">⟳</button>
     <button id="home" title="主页">⌂</button>
     <input id="url" spellcheck="false" placeholder="输入网址或搜索内容" />
-    <span id="badge"></span>
+    <span id="badge" class="hidden"><i id="dot"></i><span id="who"></span></span>
+    <div id="bar"></div>
 
     <script>
       const $ = (id) => document.getElementById(id)
@@ -142,6 +196,8 @@
         }
       })
 
+      let wasLoading = false
+
       // 主进程推送当前状态；地址栏正在编辑时不覆盖用户输入
       nav.onState((s) => {
         if (!editing) $('url').value = s.url ?? ''
@@ -149,9 +205,32 @@
         $('fwd').disabled = !s.canGoForward
         $('reload').textContent = s.loading ? '✕' : '⟳'
         $('reload').title = s.loading ? '停止' : '刷新'
-        $('reload').classList.toggle('spin', false)
-        $('badge').innerHTML = s.identityName ? `<b>${s.identityName}</b>` : ''
-        $('badge').title = s.partition ?? ''
+
+        // 身份名用 textContent 而不是 innerHTML：
+        // 名称是用户在界面里自由输入的，拼进 innerHTML 会形成 XSS 注入点
+        // （比如取名 <img onerror=...> 就能在顶栏里执行脚本）。
+        if (s.identityName) {
+          $('who').textContent = s.identityName
+          $('badge').classList.remove('hidden')
+          $('badge').title = s.partition ?? ''
+          if (s.identityColor) $('dot').style.background = s.identityColor
+        } else {
+          $('badge').classList.add('hidden')
+        }
+
+        // 进度条状态机：开始加载→推进，结束→补满并淡出
+        const bar = $('bar')
+        if (s.loading && !wasLoading) {
+          bar.classList.remove('done')
+          bar.classList.remove('on')
+          // 强制重排，让下一帧的 width 过渡从 0 开始而不是被合并掉
+          void bar.offsetWidth
+          bar.classList.add('on')
+        } else if (!s.loading && wasLoading) {
+          bar.classList.remove('on')
+          bar.classList.add('done')
+        }
+        wasLoading = s.loading
       })
 
       nav.ready()

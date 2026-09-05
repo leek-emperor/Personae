@@ -3,6 +3,7 @@ import { writeFile, readFile, mkdir } from 'fs/promises'
 import { join, dirname } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { getTargetId } from './cdp'
+import { identityColor } from '../shared/colors'
 
 export const DEFAULT_HOME = 'https://www.baidu.com'
 
@@ -132,6 +133,15 @@ class IdentityManager {
     this.targetIds.delete(id)
     await this.persist()
     this.emit()
+    // 身份色按列表序号取，删掉靠前的一个会让后面所有身份的颜色前移。
+    // 主界面靠 emit 重渲染就够了，但各窗口顶栏是 push 模式，
+    // 不主动重推的话色点会停在旧颜色，和主界面对不上。
+    this.pushAll()
+  }
+
+  /** 重推所有已打开窗口的顶栏状态。用于身份集合发生变化后同步派生信息（如身份色）。 */
+  private pushAll(): void {
+    for (const push of this.pushers.values()) push()
   }
 
   /**
@@ -285,6 +295,9 @@ class IdentityManager {
         canGoForward: wc.navigationHistory.canGoForward(),
         loading: wc.isLoading(),
         identityName: identity.name,
+        // 每次推送时重算序号：中途删掉别的身份后颜色要跟着主界面一起变，
+        // 缓存下来反而会和列表不一致。
+        identityColor: identityColor([...this.identities.keys()].indexOf(id)),
         partition
       })
     }
@@ -364,6 +377,9 @@ class IdentityManager {
     if (win && !win.isDestroyed()) win.close()
     this.windows.delete(id)
     this.targetIds.delete(id)
+    // pushers 也要清：pushState 内部虽有 isDestroyed 守卫、调用不会出错，
+    // 但反复开关窗口会让这个 Map 一直增长。
+    this.pushers.delete(id)
     this.emit()
   }
 
