@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="t1 d1">
+  <title id="t1">Multi-Identity Browser 图标</title>
+  <desc id="d1">深色圆角底板上三个错开排列、互不相交的彩色圆角方块，代表三个隔离的浏览器身份；右下角一个白色指针，代表 agent 可操控</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E2438"/>
+      <stop offset="100%" stop-color="#12151F"/>
+    </linearGradient>
+    <linearGradient id="c1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="c2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="c3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A78BFA"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 底板 -->
+  <rect width="512" height="512" rx="114" fill="url(#bg)"/>
+
+  <!-- 三个身份卡片：错开叠放但互不相交，间隙即“隔离” -->
+  <!-- 每张卡片顶部一条浅色横条，暗示浏览器标题栏 -->
+  <g>
+    <!-- 后层 -->
+    <rect x="96" y="104" width="230" height="150" rx="26" fill="url(#c3)" opacity="0.55"/>
+    <rect x="120" y="126" width="120" height="14" rx="7" fill="#FFFFFF" opacity="0.5"/>
+  </g>
+  <g>
+    <!-- 中层 -->
+    <rect x="150" y="176" width="230" height="150" rx="26" fill="url(#c2)" opacity="0.75"/>
+    <rect x="174" y="198" width="120" height="14" rx="7" fill="#FFFFFF" opacity="0.6"/>
+  </g>
+  <g>
+    <!-- 前层：最完整，代表当前活跃身份 -->
+    <rect x="204" y="248" width="230" height="150" rx="26" fill="url(#c1)"/>
+    <rect x="228" y="270" width="120" height="14" rx="7" fill="#FFFFFF" opacity="0.75"/>
+  </g>
+
+  <!-- agent 指针：落在前层卡片内，表示被程序操控 -->
+  <g transform="translate(300 316)">
+    <path d="M0 0 L0 62 L15 47 L26 70 L40 63 L29 41 L50 39 Z"
+          fill="#FFFFFF" stroke="#0F172A" stroke-width="7"
+          stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</svg>

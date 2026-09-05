@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="t d">
+  <title id="t">Multi-Identity Browser 图标</title>
+  <desc id="d">深色圆角底板上三个阶梯排列、彼此留有明显间隙的彩色圆角卡片，代表三个互相隔离的浏览器身份；最前一张卡片上有一个白色鼠标指针，代表可被 agent 操控</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#212840"/>
+      <stop offset="100%" stop-color="#11141E"/>
+    </linearGradient>
+    <linearGradient id="cBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6BADFF"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="cGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3DDBA0"/>
+      <stop offset="100%" stop-color="#12B981"/>
+    </linearGradient>
+    <linearGradient id="cPurple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B197FC"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="114" fill="url(#bg)"/>
+
+  <!-- 三张身份卡片。
+       关键：彼此完全不相交，卡片之间留 18px 空隙 —— 间隙本身就是「隔离」，
+       重叠会传达相反的意思（共享 / 叠加）。
+       阶梯式左右错开，暗示"多个并存且可切换"。
+       每张卡上一条浅色横条 = 地址栏，让它一眼是浏览器窗口而非普通卡片。 -->
+
+  <!-- 最后一层：紫，最靠左上，透明度最低 -->
+  <g opacity="0.62">
+    <rect x="92" y="112" width="252" height="104" rx="24" fill="url(#cPurple)"/>
+    <rect x="116" y="136" width="116" height="13" rx="6.5" fill="#FFFFFF" opacity="0.55"/>
+  </g>
+
+  <!-- 中间层：绿 -->
+  <g opacity="0.82">
+    <rect x="130" y="234" width="252" height="104" rx="24" fill="url(#cGreen)"/>
+    <rect x="154" y="258" width="116" height="13" rx="6.5" fill="#FFFFFF" opacity="0.62"/>
+  </g>
+
+  <!-- 最前层：蓝，完全不透明 = 当前活跃身份 -->
+  <g>
+    <rect x="168" y="356" width="252" height="104" rx="24" fill="url(#cBlue)"/>
+    <rect x="192" y="380" width="116" height="13" rx="6.5" fill="#FFFFFF" opacity="0.78"/>
+  </g>
+
+  <!-- agent 指针：明确落在最前那张（活跃）卡片内部，右下角。
+       不能压在两张卡之间的间隙上 —— 那会让"正在操作哪个身份"变得模糊，
+       而且指针轮廓会被卡片边缘切碎。
+       双层绘制：先画带深色描边的底，再叠一层纯白填充，
+       保证描边不会侵蚀白色主体，在浅蓝底上依然清晰。 -->
+  <g transform="translate(332 374)">
+    <path d="M0 0 L0 62 L15 47 L26 70 L40 63 L29 41 L50 39 Z"
+          fill="#FFFFFF" stroke="#0D1120" stroke-width="10"
+          stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M0 0 L0 62 L15 47 L26 70 L40 63 L29 41 L50 39 Z"
+          fill="#FFFFFF"/>
+  </g>
+</svg>

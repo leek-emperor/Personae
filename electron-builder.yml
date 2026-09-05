@@ -77,6 +77,14 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+# 显式关闭 electron-builder 自带的发布逻辑。
+#
+# 发布统一由 .github/workflows/release.yml 里的 gh release upload 完成 ——
+# 三个平台并发跑时，各自去创建同一个 GitHub Release 会互相覆盖，
+# 交给一个汇总 job 处理更可控。
+#
+# 也不要留模板默认的 `provider: generic` + example.com：那是个假地址。
+# 而配成 `provider: github` 又会让 electron-builder 在打包末尾尝试推断
+# release channel，本地无 owner/repo 上下文时直接崩
+# （TypeError: Cannot read properties of null (reading 'channel')）。
+publish: null

@@ -12,3 +12,8 @@ resources/bin/
 # 捆绑的官方 skill：同样由 bundle:ab 从 agent-browser 包内复制，
 # 内容随上游版本，不入库以免与上游不同步
 resources/skills/
+
+# 本地 agent skill 配置（个人工具链，与项目源码无关）
+.agents/
+.claude/
+skills-lock.json

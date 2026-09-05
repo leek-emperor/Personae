@@ -1,4 +1,8 @@
-# multi-identity-browser
+<p align="center">
+  <img src="design/logo/icon.svg" width="128" alt="multi-identity-browser">
+</p>
+
+<h1 align="center">multi-identity-browser</h1>
 
 一个 Electron 桌面浏览器，把「多账号隔离」和「让 AI agent 操作浏览器」这两件事拼在一起：
 
@@ -79,18 +83,18 @@ claude mcp add multi-identity-browser \
 
 所有工具都接受 `identity` 参数（身份名或 id）。
 
-| 工具 | 用途 |
-|---|---|
-| `load_skill` | 取 agent-browser 当前版本的真实命令语法（默认返回段落目录，`section` 取具体段落） |
-| `list_identities` | 列出所有身份及其打开状态、当前 URL |
-| `open_identity` | 打开某个身份的窗口 |
-| `snapshot` | 无障碍树快照，返回 `[ref=eN]` 元素引用 |
-| `navigate` | 导航到 URL |
-| `click` / `fill` / `press` | 交互；`click` 支持按 ref 或按可读文本定位 |
-| `act` | 在同一个 agent-browser 进程里执行多条命令 |
-| `get_text` / `get_url` | 读取内容 |
-| `screenshot` | 截图 |
-| `eval_js` | 执行 JS |
+| 工具                       | 用途                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| `load_skill`               | 取 agent-browser 当前版本的真实命令语法（默认返回段落目录，`section` 取具体段落） |
+| `list_identities`          | 列出所有身份及其打开状态、当前 URL                                                |
+| `open_identity`            | 打开某个身份的窗口                                                                |
+| `snapshot`                 | 无障碍树快照，返回 `[ref=eN]` 元素引用                                            |
+| `navigate`                 | 导航到 URL                                                                        |
+| `click` / `fill` / `press` | 交互；`click` 支持按 ref 或按可读文本定位                                         |
+| `act`                      | 在同一个 agent-browser 进程里执行多条命令                                         |
+| `get_text` / `get_url`     | 读取内容                                                                          |
+| `screenshot`               | 截图                                                                              |
+| `eval_js`                  | 执行 JS                                                                           |
 
 `click` / `fill` 传 `@eN` 时会自动前置一次 snapshot，因为 **ref 只在单个 agent-browser 进程内有效**，跨进程复用必然报 `Unknown ref`。需要多步操作时用 `act` 把它们放进同一个 batch。
 
@@ -162,6 +166,14 @@ claude mcp add multi-identity-browser \
 
 **打包后 userData 目录名跟 `package.json` 的 `name`，不是 `productName`。** 所以是 `multi-identity-browser` 而不是 `MultiIdentityBrowser`。而 `Contents/MacOS/` 下的可执行文件名反过来跟 `productName`（`executableName` 只对 Windows 生效）。这两个反着来，很容易写错路径。
 
+**`publish: generic` + 假 URL 会让打包在最后一步崩掉。** electron-builder 模板默认给的是 `provider: generic` + `url: https://example.com/auto-updates`。改成 `provider: github` 后，它会在打包末尾尝试推断 release channel，本地没有 owner/repo 上下文时直接抛 `TypeError: Cannot read properties of null (reading 'channel')` —— 包已经打好了，却以失败退出。本项目发布走 CI 里的 `gh release upload`，所以直接设 `publish: null`。
+
+**GitHub Actions 的 job 级 `if` 拿不到 `matrix` 上下文。** 写 `if: inputs.platforms == matrix.name` 想按输入过滤平台是**静默失效**的（`actionlint` 会报 `context "matrix" is not allowed here`，但 GitHub 本身不报错），结果不管选什么都构建全部平台。要在前置 job 里动态生成 matrix JSON，再用 `fromJSON` 喂给 `strategy.matrix`。
+
+**用 Electron 渲染 SVG 时要挡掉 `window-all-closed`。** 图标生成脚本是「建窗口 → 截图 → 销毁 → 建下一个」的循环，每次 `destroy()` 都让窗口数归零，Electron 默认据此退出整个 app —— 表现是只渲染出第一个尺寸就崩，子进程报 `No rendezvous client, terminating process (parent died?)`，看起来像时序问题但重试无效。注册一个空的 `window-all-closed` 处理器即可。
+
+另外两点：Retina 屏上 `capturePage` 默认按 devicePixelRatio 输出（请求 512 得到 1024），要锁 `zoomFactor` / `deviceScaleFactor`；稍长的 SVG 内联成 `data:text/html;base64,...` 会超长导致 `loadURL` 报 `ERR_FAILED (-2)`，改用临时文件 + `file://` 引用。
+
 ## 已知限制与安全说明
 
 - **隔离是约定层，不是架构层。** CDP 端口没有访问控制。虽然只监听回环且端口随机，但任何能连上它的本地进程都可以操作**所有**身份，跨越 partition 边界。这是「让外部 agent 能接入」的直接代价。不要在多用户共享的机器上处理敏感账号。
@@ -190,9 +202,45 @@ src/renderer/
 scripts/
   mcp-server.mjs           MCP server（stdio JSON-RPC）
   bundle-agent-browser.mjs 捆绑二进制与 core skill
+  make-icons.mjs           SVG → PNG / icns / ico
+design/logo/
+  icon.svg                 图标源文件（改这个，然后跑 pnpm icons）
+  concept*.svg             设计过程中的备选概念稿
+.github/workflows/
+  release.yml     打包并发布到 GitHub Release（手动触发）
+  check.yml       lint / typecheck / 打包冒烟（手动触发）
 ```
 
 `resources/bin/` 和 `resources/skills/` 由 `pnpm bundle:ab` 生成，不入库。
+
+## 图标
+
+图标源文件是 `design/logo/icon.svg`（三张互不相交的彩色卡片代表三个隔离身份，指针代表 agent 操控）。改完 SVG 后重新生成各平台格式：
+
+```bash
+pnpm icons
+```
+
+会产出 `build/icon.png`（1024）、`build/icon.icns`、`build/icon.ico` 和 `resources/icon.png`（512，运行时窗口图标）。
+
+生成走的是 **Electron 内置 Chromium**，不需要 rsvg-convert / Inkscape / ImageMagick —— 这些工具在干净环境里通常都没有，而 Electron 是本项目必然存在的依赖。`.icns` 用系统 `iconutil` 打包，`.ico` 直接按格式拼字节。
+
+## 发布
+
+两个工作流都**只能手动触发**（`workflow_dispatch`），不会因为 push 或打 tag 自动跑。
+
+到 GitHub 的 **Actions** 页面选择工作流 → **Run workflow**：
+
+| 工作流              | 用途                        | 参数                                                                                |
+| ------------------- | --------------------------- | ----------------------------------------------------------------------------------- |
+| **Build & Release** | 三平台打包并创建 Release    | 版本号（可留空）、平台（all / macos / windows / linux）、是否建 Release、是否预发布 |
+| **Check**           | lint + typecheck + 打包冒烟 | 是否跑打包                                                                          |
+
+Release 以**草稿**形式创建，确认产物无误后再手动点 Publish。若 tag 已存在，会往已有 Release 追加文件（`--clobber` 覆盖同名），重跑不会直接失败。
+
+发布不走 electron-builder 自带的 publish（`electron-builder.yml` 里 `publish: null`），而是由一个汇总 job 用 `gh release upload` 统一上传。原因是三个平台并发时各自去创建同一个 Release 会互相覆盖。
+
+CI 上 macOS 产物同样是 adhoc 签名。要正式签名，在仓库 Secrets 里配 `CSC_LINK` / `CSC_KEY_PASSWORD`，并把 `electron-builder.yml` 的 `notarize` 改为 `true`。
 
 ## License
 

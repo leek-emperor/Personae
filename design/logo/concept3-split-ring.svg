@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="t3 d3">
+  <title id="t3">Multi-Identity Browser 图标（概念三）</title>
+  <desc id="d3">深色圆角底板上一个由三段独立弧线组成的环，三段之间有明显间隙代表隔离，中心是一个指针</desc>
+
+  <defs>
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E2438"/>
+      <stop offset="100%" stop-color="#12151F"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="114" fill="url(#bg3)"/>
+
+  <!-- 三段弧：同一个环被切成三份，缺口就是隔离边界 -->
+  <g fill="none" stroke-width="34" stroke-linecap="round" transform="translate(256 256)">
+    <!-- 每段 100 度，间隙 20 度 -->
+    <path d="M 0 -150 A 150 150 0 0 1 129.9 75" stroke="#3B82F6"
+          transform="rotate(10)"/>
+    <path d="M 0 -150 A 150 150 0 0 1 129.9 75" stroke="#10B981"
+          transform="rotate(130)"/>
+    <path d="M 0 -150 A 150 150 0 0 1 129.9 75" stroke="#8B5CF6"
+          transform="rotate(250)"/>
+  </g>
+
+  <!-- 中心指针 -->
+  <g transform="translate(232 214)">
+    <path d="M0 0 L0 78 L19 59 L33 88 L50 79 L36 51 L63 49 Z"
+          fill="#FFFFFF" stroke="#0F172A" stroke-width="8"
+          stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</svg>

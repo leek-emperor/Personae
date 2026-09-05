@@ -1,0 +1,259 @@
+name: Build & Release
+
+# 只手动触发。
+#
+# 刻意不加 push / tag / schedule 触发器：这个项目每次打包要下载 Electron
+# 并在三个平台上跑，没必要每次提交都烧 CI 额度。需要出包时到
+# Actions → Build & Release → Run workflow 点一下。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（留空则用 package.json 里的值）。填写会同时写回 package.json'
+        required: false
+        type: string
+      platforms:
+        description: '要构建的平台'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macos
+          - windows
+          - linux
+      release:
+        description: '构建完是否创建 GitHub Release（草稿）'
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: '标记为预发布'
+        required: false
+        default: false
+        type: boolean
+
+# 允许创建 release 和上传附件
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── 先算出版本号和构建矩阵，供后面所有 job 复用 ─────────────────────
+  # 单独一个 job 而不是各 job 各算一次：避免三个平台算出不一致的版本，
+  # 也让 tag 名只有一个来源。
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: v
+        name: 解析版本号
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          # 去掉可能手输的前导 v，统一由下面加
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "版本: $VERSION / tag: v$VERSION"
+
+      - id: m
+        name: 生成构建矩阵
+        # 必须在这里动态生成，不能在 build job 上用
+        # `if: inputs.platforms == matrix.name` 过滤 ——
+        # job 级 if 拿不到 matrix 上下文（actionlint 会报
+        # "context matrix is not allowed here"），那样写平台选择会静默失效，
+        # 不管选什么都构建全部三个平台。
+        run: |
+          set -euo pipefail
+          MAC='{"os":"macos-14","name":"macos","script":"build:mac"}'
+          WIN='{"os":"windows-latest","name":"windows","script":"build:win"}'
+          LIN='{"os":"ubuntu-latest","name":"linux","script":"build:linux"}'
+
+          case "${{ inputs.platforms }}" in
+            macos)   INCLUDE="[$MAC]" ;;
+            windows) INCLUDE="[$WIN]" ;;
+            linux)   INCLUDE="[$LIN]" ;;
+            *)       INCLUDE="[$MAC,$WIN,$LIN]" ;;
+          esac
+
+          echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
+          echo "构建平台: ${{ inputs.platforms }}"
+          echo "$INCLUDE"
+
+  build:
+    needs: prepare
+    strategy:
+      # 一个平台失败不影响其他平台继续，便于只重跑坏的那个
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        # agent-browser 的 postinstall 会下载 Chrome for Testing（~684MB），
+        # 本项目只用 --cdp 连自己的 Chromium，完全不需要它。
+        # pnpm-workspace.yaml 里已把它的 build 关掉，这里不必额外处理。
+        run: pnpm install --frozen-lockfile
+
+      - name: 写入版本号
+        if: ${{ inputs.version != '' }}
+        run: pnpm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: 生成应用图标
+        # 图标产物（build/icon.*、resources/icon.png）已在仓库里，
+        # 这一步是为了保证它们与 design/logo/icon.svg 始终同步 ——
+        # 万一有人只改了 SVG 忘了重新生成，CI 会用最新的。
+        run: pnpm icons
+
+      - name: 校验代码
+        run: |
+          pnpm lint
+          pnpm typecheck
+
+      - name: 构建并打包
+        run: pnpm run ${{ matrix.script }}
+        env:
+          # 不让 electron-builder 自己发布 —— 由后面的 release job 统一上传，
+          # 否则三个平台会并发创建同一个 release 而互相覆盖。
+          # 留空 GH_TOKEN 即可让它跳过 publish。
+          GH_TOKEN: ''
+          # macOS：默认 adhoc 签名（electron-builder.yml 里 identity: '-'）。
+          # 要正式签名/公证就在仓库 Secrets 里配下面这些，然后把
+          # electron-builder.yml 的 notarize 改成 true。
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # 没配证书时别让 electron-builder 去钥匙串乱挑
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: 整理待发布产物
+        # dist/ 里还有 latest*.yml、blockmap、解包目录等，
+        # 只挑真正给用户下载的安装包。
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          # -maxdepth 1：不进 mac-arm64/ 之类的解包目录
+          find dist -maxdepth 1 -type f \
+            \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \
+               -o -name '*.AppImage' -o -name '*.deb' -o -name '*.snap' \) \
+            -exec cp {} upload/ \;
+          echo "--- 待上传 ---"
+          ls -lh upload/ || true
+          # 一个产物都没有说明打包实际失败了，别让它静默通过
+          if [ -z "$(ls -A upload/ 2>/dev/null)" ]; then
+            echo "::error::没有生成任何安装包产物"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: upload/
+          retention-days: 14
+          if-no-files-found: error
+
+  # ── 汇总所有平台产物，创建 Release ─────────────────────────────────
+  release:
+    needs: [prepare, build]
+    # build 里任一平台失败时仍然发布已成功的那些，
+    # 但 build 被整体跳过时就不发。
+    if: ${{ inputs.release && always() && contains(needs.build.result, 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 汇总产物
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          # download-artifact 会按 artifact 名建子目录，这里拍平
+          find artifacts -type f -exec cp {} release/ \;
+          echo "--- 本次发布 ---"
+          ls -lh release/
+
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          NOTES=$(cat <<'EOF'
+          ## 安装
+
+          | 平台 | 文件 |
+          |---|---|
+          | macOS (Apple Silicon) | `.dmg` 或 `.zip` |
+          | Windows | `-setup.exe` |
+          | Linux | `.AppImage` / `.deb` / `.snap` |
+
+          ### macOS 首次打开
+
+          产物是 **adhoc 签名**（未使用 Apple 开发者证书，也未公证），
+          Gatekeeper 会拦下。首次打开需要：
+
+          右键点击 app → 打开 → 在弹窗里再次确认「打开」。
+
+          或者在终端里移除隔离属性：
+
+          ```bash
+          xattr -dr com.apple.quarantine /Applications/MultiIdentityBrowser.app
+          ```
+
+          ### 接入 Codex / Claude Code
+
+          启动应用后，在主界面点「接入 Codex / Claude Code」一键写入配置，
+          或参考 README 手动配置。应用内已捆绑 agent-browser，
+          **不需要另外安装 Node 或 agent-browser**。
+          EOF
+          )
+
+          FLAGS=(--draft)
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            FLAGS+=(--prerelease)
+          fi
+
+          # tag 已存在就往已有 release 上追加文件，避免重跑直接失败
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG 已存在，追加产物（--clobber 覆盖同名文件）"
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* \
+              --title "$VERSION" \
+              --notes "$NOTES" \
+              "${FLAGS[@]}"
+          fi
+
+          echo "✓ 已创建草稿 release：$TAG"
+          echo "到 Releases 页面确认内容后手动点 Publish。"

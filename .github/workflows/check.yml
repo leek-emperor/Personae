@@ -1,0 +1,77 @@
+name: Check
+
+# 同样只手动触发 —— 与 Build & Release 保持一致，不消耗额度。
+# 这个 workflow 只跑 lint / typecheck / 打包冒烟，比出正式包快很多，
+# 适合改完代码先自查一遍。
+on:
+  workflow_dispatch:
+    inputs:
+      pack:
+        description: '是否顺带跑一次打包冒烟（--dir，不出安装包）'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  check:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 生成应用图标
+        run: pnpm icons
+
+      - name: 确认图标产物与 SVG 同步
+        # 若有人改了 design/logo/icon.svg 却没重新生成图标，这里会失败。
+        # 注意 PNG 编码在不同机器上可能有细微差异，所以只比较尺寸和格式，
+        # 不比较哈希。
+        run: |
+          set -euo pipefail
+          for f in build/icon.png build/icon.icns build/icon.ico resources/icon.png; do
+            if [ ! -s "$f" ]; then
+              echo "::error::缺少图标产物 $f"
+              exit 1
+            fi
+            echo "✓ $f ($(wc -c < "$f") bytes)"
+          done
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - name: 打包冒烟
+        if: ${{ inputs.pack }}
+        run: pnpm build:unpack
+        env:
+          GH_TOKEN: ''
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: 校验捆绑内容是否进包
+        if: ${{ inputs.pack }}
+        # 这四项是最容易在打包路径下丢掉的东西（历史上全部踩过），
+        # 每次打包都确认一遍。
+        run: |
+          set -euo pipefail
+          APP="dist/mac-arm64/MultiIdentityBrowser.app/Contents/Resources"
+          fail=0
+          for p in "bin/darwin-arm64/agent-browser" "skills/core/SKILL.md" "mcp-server.mjs" "icon.icns"; do
+            if [ -e "$APP/$p" ]; then
+              echo "✓ $p"
+            else
+              echo "::error::打包产物缺少 $p"
+              fail=1
+            fi
+          done
+          exit $fail

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="t2 d2">
+  <title id="t2">Multi-Identity Browser 图标（概念二）</title>
+  <desc id="d2">深色圆角底板上三个等距排列、互不接触的彩色圆点构成的竖向分栏，右下角指针代表 agent 操控</desc>
+
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E2438"/>
+      <stop offset="100%" stop-color="#12151F"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="114" fill="url(#bg2)"/>
+
+  <!-- 一个抽象浏览器窗口：顶部三个圆点（红黄绿之外用身份色），下面是被分成三条的内容区 -->
+  <rect x="86" y="118" width="340" height="276" rx="34" fill="#FFFFFF" opacity="0.07"/>
+  <rect x="86" y="118" width="340" height="66" rx="34" fill="#FFFFFF" opacity="0.08"/>
+  <rect x="86" y="150" width="340" height="34" fill="#FFFFFF" opacity="0.08"/>
+
+  <!-- 顶栏三个身份圆点 -->
+  <circle cx="132" cy="151" r="17" fill="#3B82F6"/>
+  <circle cx="182" cy="151" r="17" fill="#10B981"/>
+  <circle cx="232" cy="151" r="17" fill="#8B5CF6"/>
+
+  <!-- 内容区三条独立轨道，互不相连 = 隔离 -->
+  <rect x="120" y="218" width="272" height="26" rx="13" fill="#3B82F6" opacity="0.85"/>
+  <rect x="120" y="266" width="210" height="26" rx="13" fill="#10B981" opacity="0.85"/>
+  <rect x="120" y="314" width="150" height="26" rx="13" fill="#8B5CF6" opacity="0.85"/>
+
+  <!-- agent 指针 -->
+  <g transform="translate(322 300)">
+    <path d="M0 0 L0 62 L15 47 L26 70 L40 63 L29 41 L50 39 Z"
+          fill="#FFFFFF" stroke="#0F172A" stroke-width="7"
+          stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</svg>
