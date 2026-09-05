@@ -15,7 +15,7 @@
  *
  * 推荐用应用界面的「一键配置」写入 codex，等价的手工配置为：
  *   [mcp_servers.el_test_browser]
- *   command = "/Applications/MultiIdentityBrowser.app/Contents/MacOS/multi-identity-browser"
+ *   command = "/Applications/MultiIdentityBrowser.app/Contents/MacOS/MultiIdentityBrowser"
  *   args = ["/Applications/MultiIdentityBrowser.app/Contents/Resources/mcp-server.mjs"]
  *   [mcp_servers.el_test_browser.env]
  *   ELECTRON_RUN_AS_NODE = "1"

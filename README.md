@@ -39,20 +39,30 @@ pnpm dev
 pnpm build:mac      # 或 build:win / build:linux
 ```
 
+默认使用 **adhoc 签名**（`identity: '-'`），不需要任何 Apple 开发者证书，产物能在本机正常运行。但 adhoc 签名的 app **不能分发给别人**——对方打开会被 Gatekeeper 拦下。要正式分发，通过环境变量提供证书并把 `notarize` 改为 `true`：
+
+```bash
+CSC_LINK=/path/to/cert.p12 CSC_KEY_PASSWORD=... \
+APPLE_ID=... APPLE_APP_SPECIFIC_PASSWORD=... APPLE_TEAM_ID=... \
+pnpm build:mac
+```
+
 ## 接入 Codex / Claude Code
 
-界面上有「接入 Codex / Claude Code」面板，点一次「一键配置」就会把 MCP server 写进 `~/.codex/config.toml`（幂等，写入前自动备份）。
+界面上有「接入 Codex / Claude Code」面板，点一次「一键配置」就会把 MCP server 写进 `~/.codex/config.toml`（幂等，写入前自动备份）。**推荐用它**——路径是运行时从 `process.execPath` 取的，不会写错。
 
-也可以手动配置：
+手动配置的话，macOS 上是：
 
 ```toml
 [mcp_servers.multi_identity_browser]
-command = "/Applications/MultiIdentityBrowser.app/Contents/MacOS/multi-identity-browser"
+command = "/Applications/MultiIdentityBrowser.app/Contents/MacOS/MultiIdentityBrowser"
 args = ["/Applications/MultiIdentityBrowser.app/Contents/Resources/mcp-server.mjs"]
 
 [mcp_servers.multi_identity_browser.env]
 ELECTRON_RUN_AS_NODE = "1"
 ```
+
+注意 `Contents/MacOS/` 下的可执行文件名是 **`MultiIdentityBrowser`**（跟随 `productName`），不是 `multi-identity-browser`——`electron-builder` 的 `executableName` 只对 Windows 生效。
 
 `command` 指向 app 自己的二进制，配合 `ELECTRON_RUN_AS_NODE=1` 让它退化成纯 Node 运行时。**这样用户机器上不需要装 Node**（已实测：把 `PATH` 设为 `/usr/bin:/bin`，完整流程仍然跑通）。
 
@@ -61,7 +71,7 @@ Claude Code：
 ```bash
 claude mcp add multi-identity-browser \
   --env ELECTRON_RUN_AS_NODE=1 \
-  -- /Applications/MultiIdentityBrowser.app/Contents/MacOS/multi-identity-browser \
+  -- /Applications/MultiIdentityBrowser.app/Contents/MacOS/MultiIdentityBrowser \
      /Applications/MultiIdentityBrowser.app/Contents/Resources/mcp-server.mjs
 ```
 
@@ -146,14 +156,21 @@ claude mcp add multi-identity-browser \
 
 **agent-browser 默认从二进制所在位置向上查找 `skills/` 目录**，可能撞到无关项目的同名目录。必须显式传 `AGENT_BROWSER_SKILLS_DIR`。
 
+**打包时二进制不能只靠 `asarUnpack`。** `asarUnpack` 会把文件放到 `app.asar.unpacked/resources/bin/`，而代码里的 `process.resourcesPath` 指向 `Contents/Resources`——两者不是同一个位置，打包后直接找不到二进制。要走 `extraResources` 让路径对齐；`asarUnpack` 只留真正被 `?asset` import 的文件，否则同一份二进制会被打包两次。
+
+**macOS 上不能简单地「不签名」。** 设 `identity: null` 会让 electron-builder 完全跳过签名，bundle 保留 Electron 原始的 adhoc 签名，但资源已被改过，签名与内容不匹配，app **静默拒绝启动**（无报错、无日志，`spctl` 报 `code has no resources but signature indicates they must be present`）。正确做法是 `identity: '-'` 做 adhoc 签名，并在 entitlements 里加 `com.apple.security.cs.disable-library-validation`（`entitlements` 和 `entitlementsInherit` 都要配，前者管主进程）。
+
+**打包后 userData 目录名跟 `package.json` 的 `name`，不是 `productName`。** 所以是 `multi-identity-browser` 而不是 `MultiIdentityBrowser`。而 `Contents/MacOS/` 下的可执行文件名反过来跟 `productName`（`executableName` 只对 Windows 生效）。这两个反着来，很容易写错路径。
+
 ## 已知限制与安全说明
 
 - **隔离是约定层，不是架构层。** CDP 端口没有访问控制。虽然只监听回环且端口随机，但任何能连上它的本地进程都可以操作**所有**身份，跨越 partition 边界。这是「让外部 agent 能接入」的直接代价。不要在多用户共享的机器上处理敏感账号。
 - **所有跳转被拦在窗口内。** `setWindowOpenHandler` 把 `window.open` 和 `target="_blank"` 都改成在当前窗口导航，以保证一个身份始终对应一个 target。代价是**会破坏依赖弹窗的 OAuth 登录流程**。
 - **每个身份占 3 个 CDP page target**（外壳 + 顶栏 + 内容），身份数 × 3。
 - **捆绑的 agent-browser 版本被钉死**在构建时的版本，上游修复不会自动获得。
-- 目前只在 macOS (arm64) 上实测。`bundle:ab` 会按当前平台捆绑，其他平台未验证。
-- **打包签名未验证**：macOS 公证 / Windows 签名是否覆盖 `resources/bin/` 下的二进制，尚未测试。
+- 目前只在 macOS (arm64) 上实测过，含打包产物（`electron-builder --dir`）。`bundle:ab` 会按当前平台捆绑，Windows / Linux 未验证。
+- **adhoc 签名不可分发**：默认产物只能在本机运行，给别人会被 Gatekeeper 拦。正式分发需要自备证书并开启公证。
+- **Codex 侧未用真实客户端验证**：MCP 协议流程是用脚本扮演客户端测通的（包括打包产物 + 无 Node 环境），但没有用真实的 codex 跑一遍。
 
 ## 项目结构
 

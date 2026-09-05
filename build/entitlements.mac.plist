@@ -8,5 +8,11 @@
     <true/>
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
+    <!-- adhoc 签名 + hardenedRuntime 时必须有这一条，否则库校验会让 app
+         启动失败（electron-builder 会就此发警告）。
+         本项目还要执行捆绑的 agent-browser 二进制，它与主 app 不是同一
+         签名主体，同样依赖放宽库校验。 -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
   </dict>
 </plist>

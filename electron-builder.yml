@@ -10,7 +10,10 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
-  - resources/**
+  # 只解包被 `?asset` import 的图标。
+  # bin/ 与 skills/ 走下面的 extraResources —— 若也放在这里会各打包两份
+  # （二进制 12MB 白占体积），且 unpacked 路径与 process.resourcesPath 不一致。
+  - resources/icon.png
 extraResources:
   # MCP 脚本随包分发。用户机器无需装 Node —— codex 会用 app 自身的二进制
   # 配合 ELECTRON_RUN_AS_NODE=1 来执行它（见 src/main/mcp-setup.ts）
@@ -19,6 +22,14 @@ extraResources:
   # agent-browser 官方 skill，供 `skills get` 输出与捆绑版本匹配的命令语法
   - from: resources/skills
     to: skills
+  # agent-browser 二进制。
+  #
+  # 必须走 extraResources 而不是只靠 asarUnpack：后者会落在
+  # app.asar.unpacked/resources/bin/ 下，而 process.resourcesPath 指向
+  # Contents/Resources，两者不是同一个位置（实测打包后代码找不到二进制）。
+  # 放到 Resources/bin/ 让路径与 process.resourcesPath 直接对齐。
+  - from: resources/bin
+    to: bin
 win:
   executableName: multi-identity-browser
 nsis:
@@ -27,6 +38,9 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # entitlements 作用于主可执行文件，entitlementsInherit 作用于 helper 进程。
+  # 两者都要指定 —— 只配 Inherit 时主进程拿不到 disable-library-validation。
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -34,6 +48,23 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
+  # 默认用 adhoc 签名（"-"），不使用任何开发者证书。
+  #
+  # 为什么不设 identity: null：那样 electron-builder 会完全跳过签名，
+  # bundle 保留 Electron 原始的 adhoc 签名，但资源已被我们改过，
+  # 签名与内容不匹配，macOS 直接静默拒绝启动
+  # （codesign 显示 Identifier=Electron，spctl 报
+  #  "code has no resources but signature indicates they must be present"）。
+  #
+  # 为什么不留空：electron-builder 会自动从钥匙串挑一个 "Apple Development"
+  # 证书，构建结果就依赖某台机器的本地证书，别人 clone 后打包直接失败
+  # （实测报 "The specified item could not be found in the keychain."）。
+  #
+  # adhoc 签名能在本机正常运行，但不能分发给其他人（对方会被 Gatekeeper 拦）。
+  # 要正式分发时通过环境变量提供证书，不要写进仓库：
+  #   CSC_LINK / CSC_KEY_PASSWORD（签名），APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD（公证）
+  # 并把 notarize 改为 true。
+  identity: '-'
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:

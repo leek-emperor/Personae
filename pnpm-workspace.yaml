@@ -1,5 +1,5 @@
 allowBuilds:
-  agent-browser: set this to true or false
+  agent-browser: false # 其 postinstall 下载 Chrome for Testing（~684MB），本项目只用 --cdp 连自己的 Chromium，不需要
   electron: true
   electron-winstaller: true
   esbuild: true

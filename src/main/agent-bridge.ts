@@ -25,10 +25,16 @@ export function agentBrowserPath(): string {
   const platformDir = `${process.platform}-${process.arch}`
   const exe = process.platform === 'win32' ? 'agent-browser.exe' : 'agent-browser'
 
+  // 打包后同时兼容两种位置：
+  //   · Resources/bin/…            ← extraResources（当前配置，推荐）
+  //   · app.asar.unpacked/resources/bin/… ← 仅靠 asarUnpack 时的落点
+  // 两者路径不同，只认一个会在改配置后静默失效。
   const candidates = app.isPackaged
     ? [
         join(process.resourcesPath, 'bin', platformDir, exe),
-        join(process.resourcesPath, 'bin', exe)
+        join(process.resourcesPath, 'bin', exe),
+        join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'bin', platformDir, exe),
+        join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'bin', exe)
       ]
     : [
         join(app.getAppPath(), 'resources', 'bin', platformDir, exe),
@@ -54,8 +60,12 @@ export function agentBrowserPath(): string {
  * 可能撞到无关项目的同名目录，所以必须显式传 AGENT_BROWSER_SKILLS_DIR。
  */
 export function skillsDir(): string | null {
+  // 同 agentBrowserPath：打包后兼容 extraResources 与 asarUnpack 两种落点
   const candidates = app.isPackaged
-    ? [join(process.resourcesPath, 'skills')]
+    ? [
+        join(process.resourcesPath, 'skills'),
+        join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'skills')
+      ]
     : [join(app.getAppPath(), 'resources', 'skills')]
 
   for (const p of candidates) {
@@ -82,7 +92,11 @@ async function buildInfo(): Promise<Record<string, unknown>> {
     cdpPort,
     cdpError,
     agentBrowserPath: bin,
-    agentBrowserBundled: bin.includes('resources'),
+    // 判断是否用的是捆绑二进制而非 PATH 上的。
+    // 必须忽略大小写：开发期路径是 resources/bin/…，打包后是
+    // Contents/Resources/bin/…（大写 R），写死小写会在打包版误报 false。
+    // 只有回落到 PATH 时 bin 才是裸的 "agent-browser"（不含分隔符）。
+    agentBrowserBundled: /[/\\]/.test(bin),
     skillsDir: skills,
     identities,
     // 明确告诉 agent 该怎么用，避免它按通用浏览器思路操作
