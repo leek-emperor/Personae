@@ -5,7 +5,11 @@
 <h1 align="center">Personae</h1>
 
 <p align="center">
-  多身份隔离浏览器 · 每个身份都能被 AI agent 精确操控
+  多身份隔离浏览器 · 每个身份都是独立 partition，每个窗口都能被 AI agent 精确操控
+</p>
+
+<p align="center">
+  <sub>内置 agent-browser 与 MCP server，用户无需安装 Node 或任何 CLI</sub>
 </p>
 
 一个 Electron 桌面浏览器，把「多账号隔离」和「让 AI agent 操作浏览器」这两件事拼在一起：
@@ -245,6 +249,24 @@ Release 以**草稿**形式创建，确认产物无误后再手动点 Publish。
 发布不走 electron-builder 自带的 publish（`electron-builder.yml` 里 `publish: null`），而是由一个汇总 job 用 `gh release upload` 统一上传。原因是三个平台并发时各自去创建同一个 Release 会互相覆盖。
 
 CI 上 macOS 产物同样是 adhoc 签名。要正式签名，在仓库 Secrets 里配 `CSC_LINK` / `CSC_KEY_PASSWORD`，并把 `electron-builder.yml` 的 `notarize` 改为 `true`。
+
+## 仓库信息（需手动填）
+
+GitHub 仓库的 About 栏无法通过代码配置，创建仓库后到页面右上角 ⚙️ 填入。
+
+**Description**（上限 350 字符）：
+
+```
+A desktop browser where every identity is an isolated Chromium partition, and every window can be driven by AI agents through MCP. Bundles agent-browser — users need no Node or CLI install.
+```
+
+**Topics**：
+
+```
+electron  browser  browser-automation  multi-account  multi-identity
+partition  mcp  mcp-server  cdp  chrome-devtools-protocol
+agent-browser  codex  claude-code  ai-agent
+```
 
 ## License
 

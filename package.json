@@ -1,7 +1,7 @@
 {
   "name": "personae",
   "version": "0.1.0",
-  "description": "Electron 多浏览器身份（partition 隔离）客户端，内置 agent-browser 并通过 MCP 暴露给 codex / claude code",
+  "description": "A desktop browser where every identity is an isolated Chromium partition, and every window can be driven by AI agents (Codex / Claude Code) through MCP — no Node or CLI install required.",
   "main": "./out/main/index.js",
   "author": "fengli",
   "homepage": "https://github.com/fengli/personae",
@@ -56,10 +56,13 @@
     "browser",
     "partition",
     "multi-account",
+    "multi-identity",
+    "browser-automation",
     "agent-browser",
     "mcp",
     "cdp",
     "codex",
-    "claude-code"
+    "claude-code",
+    "ai-agent"
   ]
 }
