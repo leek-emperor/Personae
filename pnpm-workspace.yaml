@@ -1,0 +1,5 @@
+allowBuilds:
+  agent-browser: set this to true or false
+  electron: true
+  electron-winstaller: true
+  esbuild: true

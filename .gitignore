@@ -1,0 +1,14 @@
+node_modules
+dist
+out
+.DS_Store
+.eslintcache
+*.log*
+
+# 捆绑的 agent-browser 二进制：体积 9MB 且属上游产物，
+# 由 `pnpm bundle:ab` 在本地生成，不入库
+resources/bin/
+
+# 捆绑的官方 skill：同样由 bundle:ab 从 agent-browser 包内复制，
+# 内容随上游版本，不入库以免与上游不同步
+resources/skills/
