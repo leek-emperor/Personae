@@ -52,7 +52,7 @@ Add one or two browser identities in the UI, then click an identity to open its 
 Packaging:
 
 ```bash
-pnpm build:mac      # or build:win / build:linux
+pnpm build:mac      # or build:win
 ```
 
 The default is **adhoc signing** (`identity: '-'`), which needs no Apple Developer certificate and runs fine on the build machine. But an adhoc-signed app **cannot be distributed** — Gatekeeper will block it on someone else's Mac. For real distribution, supply a certificate via environment variables and set `notarize` to `true`:
@@ -262,7 +262,7 @@ Go to **Actions** on GitHub, pick a workflow, then **Run workflow**:
 
 | Workflow            | Purpose                                 | Inputs                                                                                   |
 | ------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------- |
-| **Build & Release** | Build all platforms, create a Release   | version (optional), platform (all / macos / windows / linux), create release, prerelease |
+| **Build & Release** | Build macOS + Windows, create a Release | version (optional), platform (all / macos / windows), create release, prerelease |
 | **Check**           | lint + typecheck + packaging smoke test | whether to run packaging                                                                 |
 
 The Release is created as a **draft**; review the assets, then hit Publish yourself. If the tag already exists, assets are appended to it (`--clobber` overwrites same-named files), so re-runs don't just fail.

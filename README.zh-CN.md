@@ -52,7 +52,7 @@ pnpm dev
 打包：
 
 ```bash
-pnpm build:mac      # 或 build:win / build:linux
+pnpm build:mac      # 或 build:win
 ```
 
 默认使用 **adhoc 签名**（`identity: '-'`），不需要任何 Apple 开发者证书，产物能在本机正常运行。但 adhoc 签名的 app **不能分发给别人**——对方打开会被 Gatekeeper 拦下。要正式分发，通过环境变量提供证书并把 `notarize` 改为 `true`：
@@ -261,7 +261,7 @@ pnpm icons
 
 | 工作流              | 用途                        | 参数                                                                                |
 | ------------------- | --------------------------- | ----------------------------------------------------------------------------------- |
-| **Build & Release** | 三平台打包并创建 Release    | 版本号（可留空）、平台（all / macos / windows / linux）、是否建 Release、是否预发布 |
+| **Build & Release** | macOS + Windows 打包并创建 Release | 版本号（可留空）、平台（all / macos / windows）、是否建 Release、是否预发布 |
 | **Check**           | lint + typecheck + 打包冒烟 | 是否跑打包                                                                          |
 
 Release 以**草稿**形式创建，确认产物无误后再手动点 Publish。若 tag 已存在，会往已有 Release 追加文件（`--clobber` 覆盖同名），重跑不会直接失败。

@@ -21,7 +21,6 @@ on:
           - all
           - macos
           - windows
-          - linux
       release:
         description: '构建完是否创建 GitHub Release（草稿）'
         required: true
@@ -80,13 +79,11 @@ jobs:
           set -euo pipefail
           MAC='{"os":"macos-14","name":"macos","script":"build:mac"}'
           WIN='{"os":"windows-latest","name":"windows","script":"build:win"}'
-          LIN='{"os":"ubuntu-latest","name":"linux","script":"build:linux"}'
 
           case "${{ inputs.platforms }}" in
             macos)   INCLUDE="[$MAC]" ;;
             windows) INCLUDE="[$WIN]" ;;
-            linux)   INCLUDE="[$LIN]" ;;
-            *)       INCLUDE="[$MAC,$WIN,$LIN]" ;;
+            *)       INCLUDE="[$MAC,$WIN]" ;;
           esac
 
           echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
@@ -143,13 +140,19 @@ jobs:
           # 否则三个平台会并发创建同一个 release 而互相覆盖。
           # 留空 GH_TOKEN 即可让它跳过 publish。
           GH_TOKEN: ''
-          # macOS：默认 adhoc 签名（electron-builder.yml 里 identity: '-'）。
-          # 要正式签名/公证就在仓库 Secrets 里配下面这些，然后把
-          # electron-builder.yml 的 notarize 改成 true。
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           # 没配证书时别让 electron-builder 去钥匙串乱挑
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # ⚠️ 不要在这里写 CSC_LINK / CSC_KEY_PASSWORD。
+          #
+          # secret 未配置时 ${{ secrets.X }} 会展开成空字符串，而
+          # electron-builder 判断的是「变量是否存在」而非「是否为空」——
+          # 拿到空的 CSC_LINK 它会把空路径解析成项目根目录，
+          # 然后报 `⨯ <projectRoot> not a file` 直接失败。
+          # 本地能打包成功只是因为环境里根本没有这个变量。
+          #
+          # 要正式签名/公证时，在这里加回 CSC_LINK / CSC_KEY_PASSWORD，
+          # 并把 electron-builder.yml 的 notarize 改成 true。
+          # 加回时务必确认对应 secret 已配置，否则会重现上面的失败。
 
       - name: 整理待发布产物
         # dist/ 里还有 latest*.yml、blockmap、解包目录等，
@@ -160,8 +163,7 @@ jobs:
           mkdir -p upload
           # -maxdepth 1：不进 mac-arm64/ 之类的解包目录
           find dist -maxdepth 1 -type f \
-            \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \
-               -o -name '*.AppImage' -o -name '*.deb' -o -name '*.snap' \) \
+            \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \) \
             -exec cp {} upload/ \;
           echo "--- 待上传 ---"
           ls -lh upload/ || true
@@ -216,7 +218,6 @@ jobs:
           |---|---|
           | macOS (Apple Silicon) | `.dmg` 或 `.zip` |
           | Windows | `-setup.exe` |
-          | Linux | `.AppImage` / `.deb` / `.snap` |
 
           ### macOS 首次打开
 

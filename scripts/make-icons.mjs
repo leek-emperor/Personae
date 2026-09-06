@@ -129,26 +129,44 @@ app.whenReady().then(async () => {
 )
 
 const electronBin = (() => {
-  const p = join(
-    root,
-    'node_modules',
-    'electron',
-    'dist',
-    'Electron.app',
-    'Contents',
-    'MacOS',
-    'Electron'
-  )
-  if (existsSync(p)) return p
-  // 非 macOS / 其他布局
-  const alt = join(root, 'node_modules', '.bin', 'electron')
-  if (existsSync(alt)) return alt
+  const pkgDir = join(root, 'node_modules', 'electron')
+
+  // electron 安装时会写一个 path.txt，内容是当前平台可执行文件相对 dist/ 的
+  // 路径（macOS: Electron.app/Contents/MacOS/Electron，Windows: electron.exe，
+  // Linux: electron）。直接用它，不要自己按 process.platform 拼路径 ——
+  // 这是 electron 包自身的定位方式（见 node_modules/electron/index.js）。
+  const pathFile = join(pkgDir, 'path.txt')
+  if (existsSync(pathFile)) {
+    const rel = readFileSync(pathFile, 'utf8').trim()
+    const exe = join(pkgDir, 'dist', rel)
+    if (rel && existsSync(exe)) return exe
+  }
+
+  // 兜底：走 .bin 包装器。
+  // Windows 上必须挑 .cmd —— 无扩展名的那个是 shell 脚本，
+  // execFileSync 不经 shell 无法执行（实测 CI 报 spawnSync ... ENOENT）。
+  const binDir = join(root, 'node_modules', '.bin')
+  const wrappers =
+    process.platform === 'win32'
+      ? [join(binDir, 'electron.cmd'), join(binDir, 'electron.ps1')]
+      : [join(binDir, 'electron')]
+
+  for (const p of wrappers) {
+    if (existsSync(p)) return p
+  }
+
   throw new Error('找不到 electron，请先 pnpm install')
 })()
 
 console.log(`源: ${src}`)
 console.log('用 Electron 内置 Chromium 渲染 PNG…')
-execFileSync(electronBin, [renderer], { stdio: 'inherit', cwd: root })
+// .cmd / .ps1 是批处理脚本，execFileSync 不经 shell 无法直接执行，
+// 命中兜底路径时要显式开 shell。
+execFileSync(electronBin, [renderer], {
+  stdio: 'inherit',
+  cwd: root,
+  shell: /\.(cmd|ps1|bat)$/i.test(electronBin)
+})
 
 for (const s of SIZES) {
   if (!existsSync(join(work, `${s}.png`))) throw new Error(`渲染缺失: ${s}.png`)
