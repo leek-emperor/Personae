@@ -202,7 +202,7 @@ claude mcp add personae \
 - **所有跳转被拦在窗口内。** `setWindowOpenHandler` 把 `window.open` 和 `target="_blank"` 都改成在当前窗口导航，以保证一个身份始终对应一个 target。代价是**会破坏依赖弹窗的 OAuth 登录流程**。
 - **每个身份占 3 个 CDP page target**（外壳 + 顶栏 + 内容），身份数 × 3。
 - **捆绑的 agent-browser 版本被钉死**在构建时的版本，上游修复不会自动获得。
-- 目前只在 macOS (arm64) 上实测过，含打包产物（`electron-builder --dir`）。`bundle:ab` 会按当前平台捆绑，Windows / Linux 未验证。
+- **运行时行为只在 macOS (arm64) 上实测过**，含打包产物。Windows 的打包已在 CI 上跑通（macOS + Windows 均能产出安装包），但应用本身从未在 Windows 上**实际运行**过，该平台的运行时行为未验证。Linux 不再作为构建目标。`bundle:ab` 只按当前平台捆绑。
 - **adhoc 签名不可分发**：默认产物只能在本机运行，给别人会被 Gatekeeper 拦。正式分发需要自备证书并开启公证。
 - **Codex 侧未用真实客户端验证**：MCP 协议流程是用脚本扮演客户端测通的（包括打包产物 + 无 Node 环境），但没有用真实的 codex 跑一遍。
 

@@ -203,7 +203,7 @@ Two more: on Retina displays `capturePage` outputs at devicePixelRatio (asking f
 - **All navigation is confined to the window.** `setWindowOpenHandler` turns `window.open` and `target="_blank"` into same-window navigation so that one identity always maps to one target. The cost is that **OAuth flows relying on popups break**.
 - **Each identity occupies 3 CDP page targets** (shell + top bar + content), so it scales at 3× the identity count.
 - **The bundled agent-browser version is pinned** at build time; upstream fixes are not picked up automatically.
-- Only verified on macOS (arm64) so far, including packaged output. `bundle:ab` bundles for the current platform; Windows / Linux are unverified.
+- **Runtime behaviour is only verified on macOS (arm64)**, including the packaged build. Windows packaging succeeds in CI (macOS + Windows are both built and produce installers), but the app has never actually been **run** on Windows, so runtime behaviour there is unverified. Linux is not a build target. `bundle:ab` bundles for the current platform only.
 - **Adhoc-signed builds are not distributable**: they run only on the build machine and are blocked by Gatekeeper elsewhere. Real distribution needs your own certificate and notarization.
 - **The Codex side has not been verified with a real client**: the MCP flow was tested with a script acting as the client (including the packaged build in a Node-free environment), but never against an actual codex run.
 
