@@ -92,14 +92,6 @@ const zh = {
   refresh: '刷新',
   noTargets: '（无 target）',
 
-  // ── 顶栏（身份窗口）──────────────────────────────────
-  navBack: '后退',
-  navForward: '前进',
-  navReload: '刷新',
-  navStop: '停止',
-  navHome: '主页',
-  navUrlPlaceholder: '输入网址或搜索内容',
-
   // ── 其他 ──────────────────────────────────────────────
   writeFailed: '写入失败',
   langLabel: '语言'
@@ -182,13 +174,6 @@ const en: Dict = {
   viewRawTargets: 'View raw CDP targets',
   refresh: 'Refresh',
   noTargets: '(no targets)',
-
-  navBack: 'Back',
-  navForward: 'Forward',
-  navReload: 'Reload',
-  navStop: 'Stop',
-  navHome: 'Home',
-  navUrlPlaceholder: 'Enter a URL or search',
 
   writeFailed: 'Write failed',
   langLabel: 'Language'
