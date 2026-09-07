@@ -21,13 +21,39 @@
  *   ELECTRON_RUN_AS_NODE = "1"
  */
 import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 const PROTOCOL_VERSION = '2025-06-18'
+
+// 版本号不要硬编码 —— 硬编码必然会在某次发版时忘记同步，而客户端拿到的
+// serverInfo.version 是排查问题时的第一手信息，对不上会把人带偏。
+//
+// 两种形态下 package.json 的位置不一样：开发时在脚本上一级，打包后这个脚本被
+// 平铺到 Contents/Resources/ 而 package.json 在 app.asar 里，根本不同层。所以
+// 由 bundle 脚本生成一个 sidecar 放在本文件同级，两种形态下路径都稳定；
+// 开发态 sidecar 可能还没生成，再回退去读 package.json。
+const VERSION = (() => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const read = (p, pick) => {
+    try {
+      return existsSync(p) ? pick(JSON.parse(readFileSync(p, 'utf8'))) : null
+    } catch {
+      return null
+    }
+  }
+  return (
+    read(join(here, 'mcp-version.json'), (j) => j.version) ||
+    read(join(here, '..', 'resources', 'mcp-version.json'), (j) => j.version) ||
+    read(join(here, '..', 'package.json'), (j) => j.version) ||
+    // 读不到不该让整个 server 起不来，用一个一眼能看出异常的占位值
+    '0.0.0-unknown'
+  )
+})()
 
 // ── 发现运行中的 app ────────────────────────────────────────────────
 // app 每次启动端口都是随机的，通过固定路径的发现文件定位。
@@ -618,7 +644,7 @@ async function handle(req) {
     ok(id, {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: {} },
-      serverInfo: { name: 'personae', version: '0.1.0' }
+      serverInfo: { name: 'personae', version: VERSION }
     })
     return
   }

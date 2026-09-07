@@ -49,6 +49,9 @@
 
 需要 Node ≥ 20 和 pnpm（仅开发时需要；打包后的 app 不依赖它们）。
 
+`agent-browser` 必须 **≥ 0.36**。低于这个版本，`tab list --json` 不会输出 `targetId`，
+而它是把身份对应到窗口的唯一依据 —— 所有工具都会找不到目标。`package.json` 里已经锁定，不要降级。
+
 ```bash
 pnpm install
 pnpm bundle:ab      # 把 agent-browser 二进制与 core skill 复制到 resources/

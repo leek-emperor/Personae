@@ -28,6 +28,10 @@ extraResources:
   # 配合 ELECTRON_RUN_AS_NODE=1 来执行它（见 src/main/mcp-setup.ts）
   - from: scripts/mcp-server.mjs
     to: mcp-server.mjs
+  # 版本 sidecar，必须和 mcp-server.mjs 同级（它按自身位置查找）。
+  # package.json 在 asar 内、脚本在 asar 外，脚本读不到它，故单独生成。
+  - from: resources/mcp-version.json
+    to: mcp-version.json
   # agent-browser 官方 skill，供 `skills get` 输出与捆绑版本匹配的命令语法
   - from: resources/skills
     to: skills

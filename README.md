@@ -49,6 +49,10 @@ So `snapshot(identity: "Account A")` and `snapshot(identity: "Account B")` alway
 
 Requires Node ≥ 20 and pnpm (for development only; the packaged app depends on neither).
 
+`agent-browser` must be **≥ 0.36**. Below that, `tab list --json` does not emit `targetId`,
+which is the only thing tying an identity to its window — every tool would fail to find its
+target. The version in `package.json` is already pinned; don't downgrade it.
+
 ```bash
 pnpm install
 pnpm bundle:ab      # copy the agent-browser binary and core skill into resources/

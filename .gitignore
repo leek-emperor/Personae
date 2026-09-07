@@ -13,6 +13,9 @@ resources/bin/
 # 内容随上游版本，不入库以免与上游不同步
 resources/skills/
 
+# 版本 sidecar：由 bundle:ab 从 package.json 派生，入库只会带来版本不一致
+resources/mcp-version.json
+
 # 本地 agent skill 配置（个人工具链，与项目源码无关）
 .agents/
 .claude/

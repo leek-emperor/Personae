@@ -22,7 +22,9 @@ import {
   realpathSync,
   cpSync,
   readdirSync,
-  rmSync
+  rmSync,
+  readFileSync,
+  writeFileSync
 } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { execSync } from 'node:child_process'
@@ -137,3 +139,22 @@ function bundleSkills() {
 }
 
 bundleSkills()
+
+/**
+ * 把当前版本号写成 sidecar 文件，随 extraResources 平铺到 Resources/ 根，
+ * 也就是 mcp-server.mjs 的同级目录。
+ *
+ * 为什么不让 mcp-server 直接读 package.json：打包后它被平铺到
+ * Contents/Resources/ 下，而 package.json 在 app.asar 里 —— 两者不同层，
+ * 相对路径猜不中（实测退回 0.0.0-unknown）。sidecar 是唯一能保证开发态和
+ * 打包态都处在同一相对位置的做法。
+ */
+function writeVersionSidecar() {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  const out = join(root, 'resources', 'mcp-version.json')
+  writeFileSync(out, JSON.stringify({ version: pkg.version }) + '\n')
+  console.log(`\n✓ 已写入版本 sidecar: ${pkg.version}`)
+  console.log(`  目标: ${out}`)
+}
+
+writeVersionSidecar()
