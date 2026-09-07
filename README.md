@@ -16,6 +16,14 @@
   <b>English</b> · <a href="./README.zh-CN.md">中文</a>
 </p>
 
+<!-- Demo GIF goes here. Record with Shift+Cmd+5, then:
+       ./scripts/mov2gif.sh ~/Desktop/recording.mov
+     and uncomment the block below.
+<p align="center">
+  <img src="docs/demo.gif" width="820" alt="Two identities driven independently by an agent">
+</p>
+-->
+
 An Electron desktop browser that combines two things: **multi-account isolation** and **letting AI agents drive the browser**.
 
 - Each **browser identity** is its own Chromium `persist:` partition — cookies, localStorage and login state are fully isolated, so you can be signed into the same site under several accounts at once.

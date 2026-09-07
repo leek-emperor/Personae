@@ -9,6 +9,8 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,README.zh-CN.md}'
   # 设计源文件只用于生成图标，不需要进包
   - '!design'
+  # README 用的演示 GIF/截图，只服务于仓库页面，进包纯属浪费体积
+  - '!docs'
   # 本地 agent / 编辑器工具配置。
   # electron-builder 不读 .gitignore，所以即使这些目录没入库，
   # 仍然会被打进 asar（实测 .agents/skills 下的 5 个文件都进了包）。

@@ -16,6 +16,14 @@
   <a href="./README.md">English</a> · <b>中文</b>
 </p>
 
+<!-- 演示 GIF 放这里。用 Shift+Cmd+5 录屏后执行：
+       ./scripts/mov2gif.sh ~/Desktop/录屏.mov
+     然后取消下面这段的注释。
+<p align="center">
+  <img src="docs/demo.gif" width="820" alt="agent 分别驱动两个身份">
+</p>
+-->
+
 一个 Electron 桌面浏览器，把「多账号隔离」和「让 AI agent 操作浏览器」这两件事拼在一起：
 
 - 每个**浏览器身份**是一个独立的 Chromium `persist:` partition —— cookie、localStorage、登录态完全隔离，同一个网站可以同时登录多个账号；
