@@ -22,12 +22,17 @@ on:
           - macos
           - windows
       release:
-        description: '构建完是否创建 GitHub Release（草稿）'
+        description: 'Create a GitHub Release after the build'
         required: true
         default: true
         type: boolean
+      draft:
+        description: 'Keep the release as a draft (needs a manual Publish click)'
+        required: false
+        default: false
+        type: boolean
       prerelease:
-        description: '标记为预发布'
+        description: 'Mark as pre-release'
         required: false
         default: false
         type: boolean
@@ -212,35 +217,47 @@ jobs:
           set -euo pipefail
 
           NOTES=$(cat <<'EOF'
-          ## 安装
+          ## Install
 
-          | 平台 | 文件 |
+          | Platform | File |
           |---|---|
-          | macOS (Apple Silicon) | `.dmg` 或 `.zip` |
+          | macOS (Apple Silicon) | `.dmg` or `.zip` |
           | Windows | `-setup.exe` |
 
-          ### macOS 首次打开
+          ### Opening it on macOS for the first time
 
-          产物是 **adhoc 签名**（未使用 Apple 开发者证书，也未公证），
-          Gatekeeper 会拦下。首次打开需要：
+          These builds are **adhoc-signed** — no Apple Developer certificate, no
+          notarization — so Gatekeeper will block the first launch. To get past it:
 
-          右键点击 app → 打开 → 在弹窗里再次确认「打开」。
+          Right-click the app → Open → confirm "Open" in the dialog.
 
-          或者在终端里移除隔离属性：
+          Or drop the quarantine attribute from a terminal:
 
           ```bash
           xattr -dr com.apple.quarantine /Applications/Personae.app
           ```
 
-          ### 接入 Codex / Claude Code
+          ### Connecting Codex / Claude Code
 
-          启动应用后，在主界面点「接入 Codex / Claude Code」一键写入配置，
-          或参考 README 手动配置。应用内已捆绑 agent-browser，
-          **不需要另外安装 Node 或 agent-browser**。
+          Launch the app and click "Configure Codex" on the main screen to write the
+          config for you, or set it up by hand following the README. agent-browser is
+          bundled — **you do not need to install Node or agent-browser separately**.
+
+          The interface is in English by default; use the EN / 中 toggle in the
+          top-right corner to switch to Chinese.
           EOF
           )
 
-          FLAGS=(--draft)
+          # 默认直接发布而不是留草稿。草稿有个不明显的坑：GitHub 在草稿状态下
+          # 根本不创建 tag（release 页 URL 会是 untagged-xxx 前缀，git ls-remote
+          # 也看不到），必须等到 Publish 那一刻 tag 才落地。之前两次发版都因此
+          # 需要手动补一次点击。要走人工复核就显式传 draft=true。
+          FLAGS=()
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            FLAGS+=(--draft)
+          else
+            FLAGS+=(--latest)
+          fi
           if [ "${{ inputs.prerelease }}" = "true" ]; then
             FLAGS+=(--prerelease)
           fi
