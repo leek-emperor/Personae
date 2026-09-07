@@ -825,3 +825,48 @@ pre.prompt {
     animation-duration: 6s;
   }
 }
+
+/* ── 语言切换 ─────────────────────────────────────────────
+   放在 masthead 最右端。做成分段控件（两个贴在一起的按钮）
+   而不是下拉：只有两个选项，一次点击完成切换比展开菜单快，
+   而且当前语言一眼可见。 */
+.langswitch {
+  margin-left: auto;
+  display: flex;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+}
+
+.langswitch button {
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.langswitch button + button {
+  border-left: 1px solid var(--line);
+}
+
+.langswitch button:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--acc) 10%, transparent);
+}
+
+/* 选中态用实色背景，和未选中拉开明确差距 —— 只靠文字颜色深浅
+   在这个尺寸下不够明显。 */
+.langswitch button.on {
+  color: var(--bg);
+  background: var(--acc);
+}

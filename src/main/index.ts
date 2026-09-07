@@ -103,6 +103,12 @@ function registerIpc(): void {
   }))
 
   ipcMain.handle('mcp:installCodex', () => installCodexConfig())
+
+  // 主界面切换语言 → 转发给所有已打开身份窗口的顶栏。
+  // 顶栏是独立文档，读不到主界面的 localStorage，只能靠主进程中转。
+  ipcMain.handle('app:setLanguage', (_e, lang: string) => {
+    identityManager.setLanguage(lang)
+  })
 }
 
 app.whenReady().then(async () => {

@@ -62,4 +62,7 @@ export type Api = {
     info: () => Promise<McpSetupInfo>
     installCodex: () => Promise<InstallResult>
   }
+  app: {
+    setLanguage: (lang: string) => Promise<void>
+  }
 }

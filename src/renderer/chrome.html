@@ -6,7 +6,7 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
     />
-    <title>导航栏</title>
+    <title>Navigation</title>
     <style>
       /* 顶栏视觉与主界面同源：深蓝黑底、同一套强调色。
          注意这里不能用主界面那两个 woff2 —— 顶栏是独立文档，
@@ -160,17 +160,51 @@
     </style>
   </head>
   <body>
-    <button id="back" title="后退">‹</button>
-    <button id="fwd" title="前进">›</button>
-    <button id="reload" title="刷新">⟳</button>
-    <button id="home" title="主页">⌂</button>
-    <input id="url" spellcheck="false" placeholder="输入网址或搜索内容" />
+    <button id="back">‹</button>
+    <button id="fwd">›</button>
+    <button id="reload">⟳</button>
+    <button id="home">⌂</button>
+    <input id="url" spellcheck="false" />
     <span id="badge" class="hidden"><i id="dot"></i><span id="who"></span></span>
     <div id="bar"></div>
 
     <script>
       const $ = (id) => document.getElementById(id)
       const nav = window.chromeApi
+
+      // 顶栏文案就这几条，内联一份即可 —— 它是独立文档，
+      // 为了 6 个字符串去打包主界面的 i18n 模块并不划算。
+      // 语言由主进程随 state 一起推来（顶栏读不到主界面的 localStorage）。
+      const I18N = {
+        en: {
+          back: 'Back',
+          fwd: 'Forward',
+          reload: 'Reload',
+          stop: 'Stop',
+          home: 'Home',
+          url: 'Enter a URL or search'
+        },
+        zh: {
+          back: '后退',
+          fwd: '前进',
+          reload: '刷新',
+          stop: '停止',
+          home: '主页',
+          url: '输入网址或搜索内容'
+        }
+      }
+      let T = I18N.en
+
+      /** 应用静态文案。loading 态下 reload 按钮的标题由 onState 覆盖。 */
+      function applyLang(lang) {
+        T = I18N[lang] || I18N.en
+        document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
+        $('back').title = T.back
+        $('fwd').title = T.fwd
+        $('home').title = T.home
+        $('url').placeholder = T.url
+      }
+      applyLang('en')
 
       let editing = false
       $('url').addEventListener('focus', () => {
@@ -203,8 +237,10 @@
         if (!editing) $('url').value = s.url ?? ''
         $('back').disabled = !s.canGoBack
         $('fwd').disabled = !s.canGoForward
+        if (s.lang && I18N[s.lang] && I18N[s.lang] !== T) applyLang(s.lang)
+
         $('reload').textContent = s.loading ? '✕' : '⟳'
-        $('reload').title = s.loading ? '停止' : '刷新'
+        $('reload').title = s.loading ? T.stop : T.reload
 
         // 身份名用 textContent 而不是 innerHTML：
         // 名称是用户在界面里自由输入的，拼进 innerHTML 会形成 XSS 注入点

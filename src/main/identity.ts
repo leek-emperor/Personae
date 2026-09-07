@@ -50,6 +50,19 @@ class IdentityManager {
   private targetIds = new Map<string, string>()
   private listeners = new Set<Listener>()
   private storePath = join(app.getPath('userData'), 'identities.json')
+  /**
+   * 顶栏语言。主界面切换后经 IPC 设进来，再推给所有已打开的顶栏。
+   * 默认 en —— 面向英文开发者社区，无法判断时英文更安全。
+   */
+  private lang = 'en'
+
+  /** 主界面切换语言时调用：记下来并立刻刷新所有顶栏。 */
+  setLanguage(lang: string): void {
+    if (lang !== 'en' && lang !== 'zh') return
+    if (this.lang === lang) return
+    this.lang = lang
+    this.pushAll()
+  }
 
   async load(): Promise<void> {
     try {
@@ -117,7 +130,7 @@ class IdentityManager {
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
     const identity: Identity = {
       id,
-      name: name.trim() || `身份 ${this.identities.size + 1}`,
+      name: name.trim() || `Identity ${this.identities.size + 1}`,
       homeUrl: homeUrl.trim() || DEFAULT_HOME,
       createdAt: Date.now()
     }
@@ -298,7 +311,9 @@ class IdentityManager {
         // 每次推送时重算序号：中途删掉别的身份后颜色要跟着主界面一起变，
         // 缓存下来反而会和列表不一致。
         identityColor: identityColor([...this.identities.keys()].indexOf(id)),
-        partition
+        partition,
+        // 顶栏是独立文档，拿不到主界面的 localStorage，语言只能由主进程带过来
+        lang: this.lang
       })
     }
     this.pushers.set(id, pushState)

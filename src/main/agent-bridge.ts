@@ -101,14 +101,14 @@ async function buildInfo(): Promise<Record<string, unknown>> {
     identities,
     // 明确告诉 agent 该怎么用，避免它按通用浏览器思路操作
     usage: {
-      note: '每个身份是一个隔离的 partition，对应唯一一个内容视图（CDP type=page）。多个身份常打开同一站点，title/url 完全相同，必须用下面给出的 targetId 定位，不能靠 title/url/索引。',
+      note: 'Each identity is an isolated partition backed by exactly one content view (CDP type=page). Several identities often have the same site open, so their title and url are identical — always locate a view by the targetId given below, never by title, url or index.',
       steps: [
-        '1. GET /identities 取身份列表及其 targetId',
+        '1. GET /identities to list identities and their targetId',
         '2. <bin> --session <sessionName> --cdp <cdpPort> --no-pin-tab batch "tab <targetId>" "snapshot -i"',
-        '3. click / fill 等使用上一步返回的 @eN ref（ref 只在同一次 batch 内有效）'
+        '3. click / fill etc. use the @eN refs returned above (a ref is only valid inside the same batch)'
       ],
       warning:
-        '两个必须注意的点：(1) --no-pin-tab 不可省 —— --pin-tab 会触发 Target.createTarget，Electron 不支持，且该状态是粘性的会持久污染 session；(2) @eN ref 只在单个 agent-browser 进程内有效，snapshot 和后续动作必须放进同一个 batch。推荐直接使用配套的 MCP server（scripts/mcp-server.mjs），它已封装这些细节。',
+        'Two things to watch: (1) --no-pin-tab is required — --pin-tab triggers Target.createTarget, which Electron does not support, and the state is sticky enough to poison the session permanently; (2) an @eN ref is only valid inside a single agent-browser process, so snapshot and the actions using it must go in the same batch. Prefer the bundled MCP server (scripts/mcp-server.mjs), which already handles all of this.',
       examples: identities
         .filter((i) => i.isOpen && i.targetId)
         .map((i) => ({
@@ -165,7 +165,7 @@ export async function startAgentBridge(): Promise<number> {
           case '/open': {
             const id = url.searchParams.get('id')
             if (!id) {
-              sendJson(res, 400, { error: '缺少 id 参数' })
+              sendJson(res, 400, { error: 'missing id parameter' })
               return
             }
             try {

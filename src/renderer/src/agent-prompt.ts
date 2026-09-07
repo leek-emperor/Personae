@@ -1,4 +1,5 @@
 import type { McpSetupInfo, IdentityState } from '../../preload/types'
+import type { Lang } from './i18n'
 
 /**
  * 生成一段可直接粘给 Codex / Claude Code 的接入 prompt。
@@ -14,11 +15,93 @@ import type { McpSetupInfo, IdentityState } from '../../preload/types'
  * 关键设计：prompt 是写给 agent 读的，不是给人读的说明书。所以用
  * 「你现在可以…」「注意…」这种直接指令口吻，并且明确要求它自己去改配置、
  * 自己重启、自己验证 —— 而不是反过来让用户操作。
+ *
+ * 跟随界面语言：用户会把这段整体复制出去，界面是英文时给一段中文 prompt
+ * 会很突兀；而且 agent 用什么语言回复通常跟着 prompt 走。
  */
-export function buildAgentPrompt(mcp: McpSetupInfo, identities: IdentityState[]): string {
+export function buildAgentPrompt(
+  mcp: McpSetupInfo,
+  identities: IdentityState[],
+  lang: Lang = 'en'
+): string {
+  return lang === 'zh' ? zhPrompt(mcp, identities) : enPrompt(mcp, identities)
+}
+
+function enPrompt(mcp: McpSetupInfo, identities: IdentityState[]): string {
   const names = identities.map((i) => i.name)
   // 身份清单要给具体名字：agent 拿到后能直接把名字填进 identity 参数，
   // 不用先猜一轮。没有身份时给出明确的前置动作。
+  const idLine = names.length
+    ? `There ${names.length === 1 ? 'is' : 'are'} currently ${names.length} identit${
+        names.length === 1 ? 'y' : 'ies'
+      }: ${names.map((n) => `"${n}"`).join(', ')}.`
+    : `There are no identities yet. I need to click "Add identity" in the Personae window before you can drive anything.`
+
+  return `I'm running a desktop app called Personae on this machine. It's a multi-identity browser: each "identity" is a fully isolated Chromium partition (its own cookies, localStorage and login state) living in its own window. The app exposes an MCP server so you can drive those windows directly.
+
+Please connect yourself to it now.
+
+## 1. How to connect
+
+The MCP server is started with:
+
+  command: ${mcp.nodeRuntime}
+  args:    ["${mcp.scriptPath}"]
+
+Note that command is **not** the system node — it's the runtime shipped inside Personae. This machine may have neither Node nor agent-browser installed; that's fine, both are bundled with the app. Do not rewrite it to \`node\` or \`npx\`.
+
+If you are Codex, write this into ${mcp.codexConfigPath} (replace the whole section if a server with the same name already exists):
+
+${mcp.codexToml}
+
+If you are Claude Code, just run:
+
+${mcp.claudeCommand}
+
+After writing the config, restart your own session so the MCP server is picked up, then call \`list_identities\` as a self-check and confirm you can see the identity list. If it reports a connection error, Personae usually isn't running — ask me to start it.
+
+## 2. What you can do once connected
+
+${idLine}
+
+There are 13 tools, all addressed by identity: pass the identity name in the \`identity\` parameter (an id or partition string works too).
+
+Reading:
+- \`list_identities\` — list every identity, whether its window is open, its current URL and CDP targetId. **Call this before anything else** — it's the only way to map an identity to a window.
+- \`open_identity\` — open or focus an identity's window. Other tools fail outright while the window is closed, so open it first.
+- \`snapshot\` — accessibility-tree snapshot of the interactive elements in that identity's window. This is your eyes.
+- \`get_text\` — read an element's text, by @eN ref or CSS selector.
+- \`get_url\` — read the current URL.
+- \`screenshot\` — capture to an absolute path.
+
+Acting:
+- \`navigate\` — navigate inside that identity's window. Navigation is confined to the window; it will never spawn a new window or hand off to the system browser.
+- \`click\` — click an element. **Prefer passing the readable name** (e.g. "Sign in"); the tool re-snapshots internally to locate it. An @eN ref also works.
+- \`fill\` — clear and type text, also locatable by name or label.
+- \`press\` — send keys such as Enter, Tab, Control+a.
+
+Advanced:
+- \`act\` — run several agent-browser commands against one identity in a single call, with refs staying valid across them. Good for "snapshot → click this → fill that → Enter" sequences.
+- \`eval_js\` — run JS inside that identity's window and get the result back. Handy for verifying isolation.
+- \`load_skill\` — fetch the command syntax of the bundled agent-browser build. **Call it before hand-writing any command for \`act\`** (see below).
+
+## 3. Pitfalls you need to know
+
+1. **Refs don't survive across calls.** The \`@eN\` numbers a snapshot returns are only valid within that one call. \`click\` and \`fill\` each re-snapshot internally, so you only need to remember what the element is *called* and let the tool find it. If you truly need ref-exact sequential steps, put them in a single \`act\` call.
+
+2. **Run \`load_skill\` before hand-writing agent-browser commands.** Its syntax changes between versions — the \`tab --url\` and \`--pin-tab\` you'll find in online docs don't exist in the build on this machine, so writing from memory will fail.
+
+3. **Use the dedicated tools; don't hunt for windows yourself.** Several identities may sit on the exact same site with identical title and URL, so telling them apart that way will cross wires. \`snapshot\` / \`click\` / \`navigate\` already handle the identity → window mapping.
+
+4. **Isolation is real.** Signing in as identity A does not sign in identity B. That's precisely the point of this app when you need several accounts in parallel — but equally, never expect one identity to see another's session.
+
+5. **The port changes on every launch.** Don't hardcode a CDP port and don't copy \`connect 9222\`-style commands from documentation. The MCP server reads the current port from a discovery file.
+
+Once you're connected, run \`list_identities\` and show me the result so we know the link works.`
+}
+
+function zhPrompt(mcp: McpSetupInfo, identities: IdentityState[]): string {
+  const names = identities.map((i) => i.name)
   const idLine = names.length
     ? `当前已存在 ${names.length} 个身份：${names.map((n) => `「${n}」`).join('、')}。`
     : `当前还没有任何身份。用户需要先在 Personae 界面里点「添加身份」，你才能操作。`

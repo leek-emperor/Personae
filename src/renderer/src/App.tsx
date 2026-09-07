@@ -8,6 +8,7 @@ import type {
 } from '../../preload/types'
 import { buildAgentPrompt } from './agent-prompt'
 import { identityColor } from '../../shared/colors'
+import { DICTS, detectLang, saveLang, type Lang } from './i18n'
 
 /**
  * 从 URL 取 host 用于展示。
@@ -34,6 +35,26 @@ function App(): React.JSX.Element {
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [lang, setLang] = useState<Lang>(detectLang)
+
+  const t = DICTS[lang]
+
+  /**
+   * 语言状态要同时反映到 <html lang> —— 它影响拼写检查、字体回退，
+   * 以及屏幕阅读器用哪种语言朗读。
+   * 顶栏是独立文档（chrome.html），走主进程转发，见 setLanguage。
+   */
+  const switchLang = useCallback((next: Lang) => {
+    setLang(next)
+    saveLang(next)
+    document.documentElement.lang = next === 'zh' ? 'zh-CN' : 'en'
+    void window.api.app.setLanguage(next)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
+    void window.api.app.setLanguage(lang)
+  }, [lang])
 
   const refresh = useCallback(async () => {
     try {
@@ -100,7 +121,7 @@ function App(): React.JSX.Element {
     try {
       const r = await window.api.mcp.installCodex()
       setInstalled(r)
-      if (!r.ok) setErr(r.error ?? '写入失败')
+      if (!r.ok) setErr(r.error ?? t.writeFailed)
       await refresh()
     } catch (e) {
       setErr(String(e))
@@ -113,7 +134,7 @@ function App(): React.JSX.Element {
   const port = info?.cdpPort ?? null
   const ready = port !== null
   const openCount = identities.filter((i) => i.isOpen).length
-  const prompt = mcp ? buildAgentPrompt(mcp, identities) : ''
+  const prompt = mcp ? buildAgentPrompt(mcp, identities, lang) : ''
 
   return (
     <div className="wrap">
@@ -126,37 +147,54 @@ function App(): React.JSX.Element {
         </div>
         <div>
           <h1>
-            Personae <em>· 多身份浏览器</em>
+            Personae <em>{t.tagline}</em>
           </h1>
           <p className="sub">
-            每个身份是一个独立的 <code>persist:</code> partition，跑在自己的窗口里，
-            登录态互不可见；每个窗口都能被 AI agent 通过 MCP 驱动。
+            {t.intro1}
+            <code>persist:</code>
+            {t.intro2}
           </p>
+        </div>
+
+        {/* 语言切换放在头部右上：它是全局设置，不属于任何一个功能区 */}
+        <div className="langswitch" role="group" aria-label={t.langLabel}>
+          <button
+            className={lang === 'en' ? 'on' : ''}
+            onClick={() => switchLang('en')}
+            aria-pressed={lang === 'en'}
+          >
+            EN
+          </button>
+          <button
+            className={lang === 'zh' ? 'on' : ''}
+            onClick={() => switchLang('zh')}
+            aria-pressed={lang === 'zh'}
+          >
+            中
+          </button>
         </div>
       </header>
 
       {/* 顶部状态条：一眼确认系统是否就绪，不必展开任何面板 */}
       <div className="statusbar">
         <div className="stat">
-          <b>状态</b>
+          <b>{t.statusLabel}</b>
           <span>
             <i className={`pulse ${ready ? '' : 'off'}`} />
-            {ready ? '就绪' : '未就绪'}
+            {ready ? t.ready : t.notReady}
           </span>
         </div>
         <div className="stat">
-          <b>CDP 端口</b>
+          <b>{t.cdpPort}</b>
           <span>{port ?? '—'}</span>
         </div>
         <div className="stat">
-          <b>身份</b>
-          <span>
-            {identities.length} 个 · {openCount} 个已打开
-          </span>
+          <b>{t.identitiesLabel}</b>
+          <span>{t.identityCount(identities.length, openCount)}</span>
         </div>
         <div className="stat">
-          <b>Agent 接入</b>
-          <span>{mcp?.codexInstalled ? 'Codex 已配置' : '未配置'}</span>
+          <b>{t.agentAccess}</b>
+          <span>{mcp?.codexInstalled ? t.codexConfigured : t.notConfigured}</span>
         </div>
       </div>
 
@@ -165,32 +203,32 @@ function App(): React.JSX.Element {
       {/* ── 身份 ───────────────────────────────────────────── */}
       <section className="card">
         <h2>
-          浏览器身份
+          {t.browserIdentities}
           <span className="count">{identities.length}</span>
         </h2>
 
         <div className="row" style={{ marginBottom: identities.length ? 14 : 0 }}>
           <input
-            placeholder="身份名称，如 账号A"
+            placeholder={t.namePlaceholder}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void add()}
           />
           <input
-            placeholder="主页 URL"
+            placeholder={t.homeUrlPlaceholder}
             value={homeUrl}
             onChange={(e) => setHomeUrl(e.target.value)}
             style={{ flex: 1.3 }}
           />
           <button className="primary" onClick={() => void add()}>
-            添加身份
+            {t.addIdentity}
           </button>
         </div>
 
         {identities.length === 0 ? (
           <div className="empty">
-            <b>还没有身份</b>
-            填个名字添加第一个。每个身份都有独立的登录态，互不影响。
+            <b>{t.emptyTitle}</b>
+            {t.emptyHint}
           </div>
         ) : (
           <div className="list">
@@ -210,7 +248,7 @@ function App(): React.JSX.Element {
                       <span className={`dot ${it.isOpen ? 'on' : ''}`} />
                       <strong>{it.name}</strong>
                       <span className={`badge ${it.isOpen ? 'on' : ''}`}>
-                        {it.isOpen ? 'live' : 'idle'}
+                        {it.isOpen ? t.live : t.idle}
                       </span>
                     </div>
                     <div className="row">
@@ -219,21 +257,21 @@ function App(): React.JSX.Element {
                         disabled={busy === it.id}
                         onClick={() => void act(it.id, () => window.api.identity.open(it.id))}
                       >
-                        {it.isOpen ? '聚焦' : '打开窗口'}
+                        {it.isOpen ? t.focus : t.openWindow}
                       </button>
                       <button
                         className="ghost"
                         disabled={!it.isOpen || busy === it.id}
                         onClick={() => void act(it.id, () => window.api.identity.close(it.id))}
                       >
-                        关闭
+                        {t.close}
                       </button>
                       <button
                         className="danger"
                         disabled={busy === it.id}
                         onClick={() => void act(it.id, () => window.api.identity.remove(it.id))}
                       >
-                        删除
+                        {t.remove}
                       </button>
                     </div>
                   </div>
@@ -252,12 +290,12 @@ function App(): React.JSX.Element {
                           {it.targetId ? (
                             <code>{it.targetId}</code>
                           ) : (
-                            <span className="dim">—（打开窗口后生成）</span>
+                            <span className="dim">{t.targetIdPending}</span>
                           )}
                         </td>
                       </tr>
                       <tr>
-                        <th>当前页</th>
+                        <th>{t.currentPage}</th>
                         <td className="ellip">
                           {it.title ? (
                             <>
@@ -278,20 +316,20 @@ function App(): React.JSX.Element {
 
                   {it.isOpen && it.targetId && (
                     <details>
-                      <summary>用 agent-browser 手工操作该身份</summary>
+                      <summary>{t.manualSummary}</summary>
                       <pre className="cmd">
                         {[
-                          `# 推荐：直接用配套 MCP（已封装身份定位与 ref 生命周期）`,
+                          t.cmdPreferMcp,
                           ``,
-                          `# 手工操作：targetId 可直接当 tab ref，一步命中`,
+                          t.cmdManual,
                           `"${bin}" --session ${sessionName} --cdp ${port ?? '<port>'} \\`,
                           `  --no-pin-tab batch "tab ${it.targetId}" "snapshot -i"`,
                           ``,
-                          `# 两个坑：`,
-                          `#  · --no-pin-tab 不可省：--pin-tab 触发 Target.createTarget，`,
-                          `#    Electron 不支持，且状态粘性会持久污染 session`,
-                          `#  · @eN ref 只在单个进程内有效，snapshot 与后续动作`,
-                          `#    必须放进同一个 batch`
+                          t.cmdPitfalls,
+                          t.cmdPitfall1a,
+                          t.cmdPitfall1b,
+                          t.cmdPitfall2a,
+                          t.cmdPitfall2b
                         ].join('\n')}
                       </pre>
                     </details>
@@ -305,12 +343,13 @@ function App(): React.JSX.Element {
 
       {/* ── Agent 接入 ─────────────────────────────────────── */}
       <section className="card">
-        <h2>接入 AI Agent</h2>
+        <h2>{t.agentSection}</h2>
         {mcp ? (
           <>
             <p className="hint">
-              你的机器<strong>无需安装 Node 或 agent-browser</strong>：MCP 脚本由本应用自带的
-              运行时执行，agent-browser 已随包捆绑。
+              {t.noInstallNeeded1}
+              <strong>{t.noInstallNeeded2}</strong>
+              {t.noInstallNeeded3}
             </p>
 
             <div className="row">
@@ -319,71 +358,70 @@ function App(): React.JSX.Element {
                 disabled={busy === 'mcp'}
                 onClick={() => void installCodex()}
               >
-                {mcp.codexInstalled ? '重新写入 Codex 配置' : '一键配置 Codex'}
+                {mcp.codexInstalled ? t.rewriteCodex : t.installCodex}
               </button>
               <button className="ghost" onClick={() => void copy('toml', mcp.codexToml)}>
-                复制 TOML
+                {t.copyToml}
               </button>
               <button className="ghost" onClick={() => void copy('claude', mcp.claudeCommand)}>
-                复制 Claude 命令
+                {t.copyClaude}
               </button>
-              {(copied === 'toml' || copied === 'claude') && <span className="copied">已复制</span>}
+              {(copied === 'toml' || copied === 'claude') && (
+                <span className="copied">{t.copied}</span>
+              )}
             </div>
 
             {installed && (
               <div className={installed.ok ? 'note ok' : 'note bad-note'}>
                 {installed.ok
-                  ? `已${
+                  ? `${
                       installed.action === 'created'
-                        ? '创建配置文件'
+                        ? t.installedCreated
                         : installed.action === 'updated'
-                          ? '更新配置'
-                          : '是最新配置'
-                    }${installed.backup ? `（原文件已备份）` : ''} — 重启 codex 生效`
-                  : `失败：${installed.error}`}
+                          ? t.installedUpdated
+                          : t.installedUnchanged
+                    }${installed.backup ? t.backupNote : ''}${t.restartCodex}`
+                  : t.installFailed(String(installed.error))}
               </div>
             )}
 
             {/* 本项目最独特的部分：一段能让 agent 自己接入、自己理解能力边界的 prompt */}
             <div className="agent-block">
-              <h3>让 agent 自己接入</h3>
-              <p>
-                把下面这段整段发给 Codex 或 Claude Code。它包含配置写法、13 个工具的用途、
-                以及几个实际踩过的坑，agent 读完会自己改配置、重启并验证链路。
-              </p>
+              <h3>{t.selfServeTitle}</h3>
+              <p>{t.selfServeHint}</p>
               <pre className="prompt">{prompt}</pre>
               <div className="row">
                 <button className="primary" onClick={() => void copy('prompt', prompt)}>
-                  复制这段 prompt
+                  {t.copyPrompt}
                 </button>
-                {copied === 'prompt' && <span className="copied">已复制，去粘给 agent</span>}
+                {copied === 'prompt' && <span className="copied">{t.copiedGoPaste}</span>}
               </div>
             </div>
 
             <details>
-              <summary>接入细节与手工配置内容</summary>
+              <summary>{t.detailsSummary}</summary>
               <table className="kv" style={{ marginTop: 10 }}>
                 <tbody>
                   <tr>
-                    <th>Codex 配置</th>
+                    <th>{t.codexConfigRow}</th>
                     <td>
                       {mcp.codexInstalled ? (
-                        <span className="ok-txt">已配置</span>
+                        <span className="ok-txt">{t.configured}</span>
                       ) : (
-                        <span className="dim">未配置</span>
+                        <span className="dim">{t.notConfigured}</span>
                       )}{' '}
                       <code className="path">{mcp.codexConfigPath}</code>
                     </td>
                   </tr>
                   <tr>
-                    <th>MCP 脚本</th>
+                    <th>{t.mcpScript}</th>
                     <td>
-                      {mcp.scriptExists ? '' : <span className="bad">缺失 — </span>}
+                      {mcp.scriptExists ? '' : <span className="bad">{t.missing}</span>}
                       <code className="path">{mcp.scriptPath}</code>
                     </td>
                   </tr>
                   <tr>
-                    <th>运行时</th>
+                    <th>{t.runtime}</th>
                     <td>
                       <code className="path">{mcp.nodeRuntime}</code>
                     </td>
@@ -395,23 +433,25 @@ function App(): React.JSX.Element {
             </details>
           </>
         ) : (
-          <p className="dim">读取中…</p>
+          <p className="dim">{t.loading}</p>
         )}
       </section>
 
       {/* ── 运行时诊断 ─────────────────────────────────────── */}
       <section className="card">
-        <h2>运行时</h2>
+        <h2>{t.runtimeSection}</h2>
         {info ? (
           <table className="kv">
             <tbody>
               <tr>
-                <th>CDP 端口</th>
+                <th>{t.cdpPort}</th>
                 <td>
                   {port ? (
                     <code>{port}</code>
                   ) : (
-                    <span className="bad">未就绪 {info.cdpError ? `— ${info.cdpError}` : ''}</span>
+                    <span className="bad">
+                      {t.notReady} {info.cdpError ? `— ${info.cdpError}` : ''}
+                    </span>
                   )}
                 </td>
               </tr>
@@ -422,7 +462,7 @@ function App(): React.JSX.Element {
                 </td>
               </tr>
               <tr>
-                <th>发现文件</th>
+                <th>{t.discoveryFile}</th>
                 <td>
                   <code className="path">{info.bridgeFile}</code>
                 </td>
@@ -436,21 +476,21 @@ function App(): React.JSX.Element {
             </tbody>
           </table>
         ) : (
-          <p className="dim">读取中…</p>
+          <p className="dim">{t.loading}</p>
         )}
         <div className="row">
           <button className="ghost" onClick={() => void loadTargets()}>
-            查看原始 CDP targets
+            {t.viewRawTargets}
           </button>
           <button className="ghost" onClick={() => void refresh()}>
-            刷新
+            {t.refresh}
           </button>
         </div>
         {targets && (
           <pre className="targets">
             {targets.length
               ? targets.map((t) => `[${t.type}] ${t.id}\n  ${t.title}\n  ${t.url}`).join('\n\n')
-              : '（无 target）'}
+              : t.noTargets}
           </pre>
         )}
       </section>

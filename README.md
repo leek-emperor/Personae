@@ -57,6 +57,10 @@ pnpm dev
 
 Add one or two browser identities in the UI, then click an identity to open its window.
 
+The interface is in English by default. Use the **EN / 中** toggle in the top-right corner to
+switch to Chinese; the choice is remembered and also applies to the toolbar inside each
+identity window and to the agent prompt you copy out.
+
 Packaging:
 
 ```bash
