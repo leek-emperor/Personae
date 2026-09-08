@@ -59,6 +59,7 @@ test('release workflow mirrors the launcher to public GitHub Packages', () => {
   const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
   assert.match(workflow, /packages: write/)
   assert.match(workflow, /npm publish --registry=https:\/\/npm.pkg.github.com/)
+  assert.match(workflow, /\/\/npm.pkg.github.com\/:_authToken=\$\{NODE_AUTH_TOKEN\}/)
   assert.match(workflow, /visibility=public/)
 })
 
