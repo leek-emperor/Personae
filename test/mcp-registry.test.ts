@@ -54,3 +54,19 @@ test('release workflow publishes the launcher before registering it through GitH
   assert.match(workflow, /mcp-publisher login github-oidc/)
   assert.match(workflow, /mcp-publisher publish/)
 })
+
+test('release workflow mirrors the launcher to public GitHub Packages', () => {
+  const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
+  assert.match(workflow, /packages: write/)
+  assert.match(workflow, /npm publish --registry=https:\/\/npm.pkg.github.com/)
+  assert.match(workflow, /visibility=public/)
+})
+
+test('release workflow skips an existing npm version so it can repair secondary publishing', () => {
+  const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
+  assert.match(
+    workflow,
+    /npm view "\$PACKAGE@\$VERSION" version --registry=https:\/\/registry.npmjs.org/
+  )
+  assert.match(workflow, /npm version already exists; skipping npm publish/)
+})
