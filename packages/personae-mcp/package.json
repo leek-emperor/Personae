@@ -1,0 +1,35 @@
+{
+  "name": "@leek-emperor/personae-mcp",
+  "version": "0.2.0",
+  "description": "MCP stdio launcher for a running Personae multi-identity browser.",
+  "license": "MIT",
+  "author": "fengli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leek-emperor/Personae.git"
+  },
+  "homepage": "https://github.com/leek-emperor/Personae",
+  "bugs": {
+    "url": "https://github.com/leek-emperor/Personae/issues"
+  },
+  "type": "module",
+  "mcpName": "io.github.leek-emperor/personae",
+  "bin": {
+    "personae-mcp": "mcp-server.mjs"
+  },
+  "files": [
+    "mcp-server.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "browser-automation",
+    "multi-identity",
+    "personae"
+  ]
+}

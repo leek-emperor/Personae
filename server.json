@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.leek-emperor/personae",
+  "title": "Personae",
+  "description": "Control specific, already-open account-isolated Personae browser identities with MCP.",
+  "repository": {
+    "url": "https://github.com/leek-emperor/Personae",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@leek-emperor/personae-mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

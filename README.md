@@ -32,6 +32,27 @@ An Electron desktop browser that combines two things: **multi-account isolation*
 
 Users don't need to pre-install Node, Chrome for Testing, or any CLI.
 
+## MCP Registry
+
+Personae is published to the official [MCP Registry](https://registry.modelcontextprotocol.io/)
+as `io.github.leek-emperor/personae` after its first Registry-enabled release.
+The Registry package is a small stdio
+launcher for a **running, separately installed Personae desktop app** — it does
+not replace the browser application or create a cloud browser.
+
+After installing and launching Personae, a client that supports npm MCP
+packages can run:
+
+```bash
+npx -y @leek-emperor/personae-mcp
+```
+
+The launcher discovers Personae through its local bridge and keeps each tool
+call scoped to the identity named in the request. It uses no API key and opens
+no public network listener. The app's **Configure Codex** control remains the
+recommended setup path because it uses the bundled Electron runtime and needs
+no Node installation.
+
 ## The problem it solves
 
 Existing browser-automation tools assume **the agent launches the browser**. If your product _is_ a browser client, it's the other way around: **the windows already exist, and they belong to different account identities**. What the agent needs is to attach without crossing identities.
@@ -317,6 +338,13 @@ Go to **Actions** on GitHub, pick a workflow, then **Run workflow**:
 The Release is created as a **draft**; review the assets, then hit Publish yourself. If the tag already exists, assets are appended to it (`--clobber` overwrites same-named files), so re-runs don't just fail.
 
 Publishing does not use electron-builder's own publish step (`publish: null` in `electron-builder.yml`); a single aggregation job uploads everything with `gh release upload` instead, because three platforms running in parallel would otherwise each try to create the same Release and clobber one another.
+
+When the **Build & Release** workflow creates a release, it also publishes the
+version-matched `@leek-emperor/personae-mcp` stdio launcher to npm and then
+publishes `server.json` with the official `mcp-publisher` CLI. Set the
+repository `NPM_TOKEN` secret (an npm automation token with permission to
+publish that public package) before the first release; MCP Registry
+authentication uses GitHub OIDC and needs no separate secret.
 
 macOS artifacts from CI are adhoc-signed too. For real signing, add `CSC_LINK` / `CSC_KEY_PASSWORD` to the repository secrets and set `notarize` to `true` in `electron-builder.yml`.
 

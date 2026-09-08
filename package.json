@@ -25,6 +25,8 @@
     "bundle:ab": "node scripts/bundle-agent-browser.mjs",
     "icons": "node scripts/make-icons.mjs",
     "mcp": "node scripts/mcp-server.mjs",
+    "mcp:sync": "node scripts/sync-mcp-registry.mjs",
+    "mcp:check": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/mcp-registry.test.ts",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
