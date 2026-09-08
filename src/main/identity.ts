@@ -4,6 +4,8 @@ import { join, dirname } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { getTargetId } from './cdp'
 import { identityColor } from '../shared/colors'
+import { classifyWindowOpen, type WindowOpenDisposition } from './window-open'
+import { normalizeInput } from './url-input'
 
 export const DEFAULT_HOME = 'https://www.baidu.com'
 
@@ -25,6 +27,18 @@ export type IdentityState = Identity & {
   targetId: string | null
   currentUrl: string | null
   title: string | null
+  /**
+   * 该身份下正在打开的子窗口（OAuth / 分享等由 window.open 弹出的窗口）。
+   * 每个子窗口是独立的 CDP target，agent 可用 targetId 单独寻址。
+   */
+  children: ChildWindowState[]
+}
+
+/** 一个被追踪的子窗口（弹窗）。归属某个身份，随主窗口关闭而消失。 */
+export type ChildWindowState = {
+  targetId: string | null
+  url: string | null
+  title: string | null
 }
 
 type Listener = () => void
@@ -45,6 +59,18 @@ class IdentityManager {
   private chromes = new Map<string, WebContentsView>()
   /** 内容视图（第三方网页，partition 生效处；agent 操作的就是它） */
   private contents = new Map<string, WebContentsView>()
+  /**
+   * 每个身份当前打开的子窗口（弹窗）。
+   * 一个身份可同时有多个（虽少见），故用数组。子窗口关闭时从中移除。
+   */
+  private children = new Map<string, Set<BrowserWindow>>()
+  /** 子窗口 webContents.id → CDP targetId，供 agent 单独寻址弹窗 */
+  private childTargetIds = new Map<number, string>()
+  /**
+   * 每个身份内容视图最近一次真实用户输入的时间戳。
+   * 用于判定 window.open 是否由用户手势触发（弹窗拦截的唯一依据）。
+   */
+  private lastInputAt = new Map<string, number>()
   /** 每个身份的状态推送函数 */
   private pushers = new Map<string, () => void>()
   private targetIds = new Map<string, string>()
@@ -55,6 +81,32 @@ class IdentityManager {
    * 默认 en —— 面向英文开发者社区，无法判断时英文更安全。
    */
   private lang = 'en'
+
+  /**
+   * 弹窗拦截器开关，默认开 —— 与主流浏览器一致。
+   * 开启时，只有「弹窗前很短时间内有真实用户输入」的 window.open 才放行为子窗口，
+   * 纯脚本自动弹窗（广告 / pop-under）被拦下。关闭则所有新窗口一律放行。
+   */
+  private popupBlocker = true
+
+  /** 最近一次被拦截的弹窗 url（供界面做不打扰的提示） */
+  private lastBlockedPopup: { identityId: string; url: string; at: number } | null = null
+
+  /** 主界面切换弹窗拦截开关时调用。 */
+  setPopupBlocker(enabled: boolean): void {
+    this.popupBlocker = enabled
+  }
+
+  popupBlockerEnabled(): boolean {
+    return this.popupBlocker
+  }
+
+  /** 取出并清空最近一次被拦截的弹窗记录（读一次即消费）。 */
+  takeBlockedPopup(): { identityId: string; url: string; at: number } | null {
+    const v = this.lastBlockedPopup
+    this.lastBlockedPopup = null
+    return v
+  }
 
   /** 主界面切换语言时调用：记下来并立刻刷新所有顶栏。 */
   setLanguage(lang: string): void {
@@ -121,9 +173,28 @@ class IdentityManager {
           isOpen: alive,
           targetId: this.targetIds.get(it.id) ?? null,
           currentUrl: contentAlive ? cwc.getURL() : null,
-          title: contentAlive ? cwc.getTitle() : null
+          title: contentAlive ? cwc.getTitle() : null,
+          children: this.childStates(it.id)
         }
       })
+  }
+
+  /** 收集某身份当前存活子窗口的状态（供列表 / agent 使用）。 */
+  private childStates(id: string): ChildWindowState[] {
+    const set = this.children.get(id)
+    if (!set) return []
+    const out: ChildWindowState[] = []
+    for (const win of set) {
+      if (win.isDestroyed()) continue
+      const wc = win.webContents
+      if (wc.isDestroyed()) continue
+      out.push({
+        targetId: this.childTargetIds.get(wc.id) ?? null,
+        url: wc.getURL() || null,
+        title: wc.getTitle() || null
+      })
+    }
+    return out
   }
 
   async add(name: string, homeUrl = DEFAULT_HOME): Promise<IdentityState> {
@@ -280,21 +351,75 @@ class IdentityManager {
     this.chromes.set(id, chrome)
     this.contents.set(id, content)
 
-    // ── 约束 2：把跳转全部限制在内容区之内 ─────────────────────────
-    // target="_blank" / window.open 默认会新建 target 或甩给系统浏览器，
-    // 两者都会破坏「一身份一 target」的前提，所以一律改为本视图导航。
-    content.webContents.setWindowOpenHandler(({ url }) => {
-      if (/^https?:\/\//i.test(url)) {
-        void content.webContents.loadURL(url)
-      } else {
-        console.warn(`[identity:${id}] 忽略非 http(s) 跳转: ${url}`)
-      }
-      return { action: 'deny' }
+    // ── 约束 2：把跳转限制在内容区，弹窗归属本身份 ────────────────
+    // 三类去向，由 classifyWindowOpen 依据「协议 + disposition + 用户激活」判定：
+    //   · same-window —— target=_blank / 无 features 的普通链接：压回本视图导航，
+    //     无 opener、不新建 target，维持「一身份一主 target」。
+    //   · allow-child —— 用户手势触发的 window.open(带 features)：放行为受控子窗口，
+    //     保留 opener（OAuth 的 postMessage/close 依赖它），并归属本身份 shell。
+    //   · ignore —— 非 http(s)，或弹窗拦截器开启时的非用户激活弹窗（广告/pop-under）。
+    //
+    // 判定「用户激活」：内容视图上最近一次真实输入距现在 < 1s。脚本自动弹窗没有
+    // 这个前置输入，据此和真人点击区分开 —— 这是主流浏览器弹窗拦截的通用做法，
+    // 不看域名、不看内容，符合开源通用诉求。
+    this.lastInputAt.set(id, 0)
+    const ACTIVATION_INPUTS = new Set(['mouseDown', 'mouseUp', 'keyDown', 'char', 'touchStart'])
+    content.webContents.on('input-event', (_e, input) => {
+      if (ACTIVATION_INPUTS.has(input.type)) this.lastInputAt.set(id, Date.now())
     })
 
+    content.webContents.setWindowOpenHandler((details) => {
+      const userActivated = Date.now() - (this.lastInputAt.get(id) ?? 0) < 1000
+      const decision = classifyWindowOpen({
+        url: details.url,
+        disposition: details.disposition as WindowOpenDisposition,
+        userActivated,
+        popupBlockerEnabled: this.popupBlocker
+      })
+
+      switch (decision) {
+        case 'same-window':
+          void content.webContents.loadURL(details.url)
+          return { action: 'deny' }
+
+        case 'ignore':
+          // 被拦截的弹窗（或非 http 协议）留个记录，界面按需提示。
+          if (/^https?:\/\//i.test(details.url)) {
+            this.lastBlockedPopup = { identityId: id, url: details.url, at: Date.now() }
+            this.emit()
+            console.warn(`[identity:${id}] 拦截非用户激活弹窗: ${details.url}`)
+          } else {
+            console.warn(`[identity:${id}] 忽略非 http(s) 跳转: ${details.url}`)
+          }
+          return { action: 'deny' }
+
+        case 'allow-child':
+          // 放行为归属本身份 shell 的受控子窗口：
+          //   · parent: win —— 浮在该身份窗口上、随之关联，不是乱飘的独立窗口
+          //   · 硬化 webPreferences，且不注入任何 preload（同内容区）
+          //   · outlivesOpener: false —— 主窗口关掉时子窗口一并收走
+          return {
+            action: 'allow',
+            outlivesOpener: false,
+            overrideBrowserWindowOptions: {
+              parent: win,
+              width: 520,
+              height: 640,
+              autoHideMenuBar: true,
+              webPreferences: {
+                partition,
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true
+              }
+            }
+          }
+      }
+    })
+
+    // 子窗口创建后：登记归属、解析 targetId、挂递归 handler、绑生命周期。
     content.webContents.on('did-create-window', (child) => {
-      console.warn(`[identity:${id}] 出现子窗口，已关闭以维持单 target`)
-      child.close()
+      void this.adoptChildWindow(id, child)
     })
 
     // ── 顶栏状态同步 ──────────────────────────────────────────────
@@ -338,6 +463,16 @@ class IdentityManager {
       this.contents.delete(id)
       this.pushers.delete(id)
       this.targetIds.delete(id)
+      this.lastInputAt.delete(id)
+      // 子窗口设了 parent: win 且 outlivesOpener: false，Electron 会连带关掉它们，
+      // 这里只清映射。逐个 destroy 是兜底（异常路径下可能没被连带关闭）。
+      const kids = this.children.get(id)
+      if (kids) {
+        for (const k of kids) {
+          if (!k.isDestroyed()) this.childTargetIds.delete(k.webContents.id)
+        }
+        this.children.delete(id)
+      }
       this.emit()
     })
 
@@ -387,6 +522,88 @@ class IdentityManager {
     return this.list().find((x) => x.id === id)!
   }
 
+  /**
+   * 接管一个新弹出的子窗口，使其归属指定身份：
+   *   · 登记到该身份的子窗口集合，解析并缓存 CDP targetId（agent 可单独寻址）；
+   *   · 递归挂 setWindowOpenHandler / did-create-window —— 子窗口自己再弹窗时，
+   *     同样按主内容区的规则处理，防止逃逸到系统浏览器或产生不受控窗口；
+   *   · 绑 closed，窗口消失时清理映射并刷新状态。
+   *
+   * 注意子窗口刻意不进 targetIds（那是「身份主 target」映射，一身份一条）。
+   * 子窗口是显式的附属 target，经 childTargetIds 暴露，主寻址契约不受影响。
+   */
+  private async adoptChildWindow(identityId: string, child: BrowserWindow): Promise<void> {
+    if (child.isDestroyed()) return
+
+    let set = this.children.get(identityId)
+    if (!set) {
+      set = new Set()
+      this.children.set(identityId, set)
+    }
+    set.add(child)
+
+    const wc = child.webContents
+    const wcId = wc.id
+
+    // 递归约束：子窗口再触发 window.open 时，同样按用户激活判定。
+    // 子窗口没有自己的输入时间戳表，用「宽松放行」不合适，这里复用父身份的
+    // 最近输入 —— 子窗口内的点击也会更新它（下方 input-event）。
+    const ACTIVATION_INPUTS = new Set(['mouseDown', 'mouseUp', 'keyDown', 'char', 'touchStart'])
+    wc.on('input-event', (_e, input) => {
+      if (ACTIVATION_INPUTS.has(input.type)) this.lastInputAt.set(identityId, Date.now())
+    })
+    wc.setWindowOpenHandler((details) => {
+      const userActivated = Date.now() - (this.lastInputAt.get(identityId) ?? 0) < 1000
+      const decision = classifyWindowOpen({
+        url: details.url,
+        disposition: details.disposition as WindowOpenDisposition,
+        userActivated,
+        popupBlockerEnabled: this.popupBlocker
+      })
+      if (decision === 'same-window') {
+        void wc.loadURL(details.url)
+        return { action: 'deny' }
+      }
+      if (decision === 'ignore') return { action: 'deny' }
+      return {
+        action: 'allow',
+        outlivesOpener: false,
+        overrideBrowserWindowOptions: {
+          parent: child,
+          width: 520,
+          height: 640,
+          autoHideMenuBar: true,
+          webPreferences: {
+            partition: this.partitionOf(identityId),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true
+          }
+        }
+      }
+    })
+    wc.on('did-create-window', (grandchild) => {
+      void this.adoptChildWindow(identityId, grandchild)
+    })
+
+    // 子窗口导航 / 标题变化时刷新列表，让界面与 agent 看到最新 url
+    const refresh = (): void => this.emit()
+    wc.on('did-navigate', refresh)
+    wc.on('did-navigate-in-page', refresh)
+    wc.on('page-title-updated', refresh)
+
+    child.on('closed', () => {
+      this.childTargetIds.delete(wcId)
+      this.children.get(identityId)?.delete(child)
+      this.emit()
+    })
+
+    // 解析 targetId：子窗口也是独立 type=page target，用权威值而非 url/title。
+    const tid = await getTargetId(wc)
+    if (tid) this.childTargetIds.set(wcId, tid)
+    this.emit()
+  }
+
   closeWindow(id: string): void {
     const win = this.windows.get(id)
     if (win && !win.isDestroyed()) win.close()
@@ -407,6 +624,7 @@ class IdentityManager {
     targetId: string | null
     url: string | null
     isOpen: boolean
+    children: ChildWindowState[]
   }> {
     return this.list().map((it) => ({
       id: it.id,
@@ -415,7 +633,8 @@ class IdentityManager {
       sessionName: this.sessionNameOf(it.id),
       targetId: it.targetId,
       url: it.currentUrl,
-      isOpen: it.isOpen
+      isOpen: it.isOpen,
+      children: it.children
     }))
   }
 
@@ -484,21 +703,6 @@ class IdentityManager {
       if (id) this.pushers.get(id)?.()
     })
   }
-}
-
-/**
- * 把地址栏输入规范化成可加载的 URL。
- *
- * 判定顺序刻意保守：带协议的直接用；形似域名的补 https；其余当搜索词。
- * 不做 http 回落，避免把用户明确的 https 意图降级。
- */
-function normalizeInput(raw: string): string {
-  const s = raw.trim()
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s
-  if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(s)) return `http://${s}`
-  // 形似域名：含点、无空格、点后是字母
-  if (/^[^\s/]+\.[a-z]{2,}(:\d+)?(\/|\?|#|$)/i.test(s)) return `https://${s}`
-  return `https://www.baidu.com/s?wd=${encodeURIComponent(s)}`
 }
 
 export const identityManager = new IdentityManager()

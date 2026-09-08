@@ -1,3 +1,9 @@
+export type ChildWindowState = {
+  targetId: string | null
+  url: string | null
+  title: string | null
+}
+
 export type IdentityState = {
   id: string
   name: string
@@ -8,6 +14,7 @@ export type IdentityState = {
   targetId: string | null
   currentUrl: string | null
   title: string | null
+  children: ChildWindowState[]
 }
 
 export type AgentInfo = {
@@ -64,5 +71,8 @@ export type Api = {
   }
   app: {
     setLanguage: (lang: string) => Promise<void>
+    getPopupBlocker: () => Promise<boolean>
+    setPopupBlocker: (enabled: boolean) => Promise<boolean>
+    onPopupBlocked: (cb: (url: string) => void) => () => void
   }
 }

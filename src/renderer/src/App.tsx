@@ -36,6 +36,9 @@ function App(): React.JSX.Element {
   const [err, setErr] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [lang, setLang] = useState<Lang>(detectLang)
+  const [popupBlocker, setPopupBlocker] = useState(true)
+  /** 最近一次被拦截的弹窗提示（几秒后自动消失） */
+  const [blockedToast, setBlockedToast] = useState<string | null>(null)
 
   const t = DICTS[lang]
 
@@ -78,6 +81,33 @@ function App(): React.JSX.Element {
     void refresh()
     return window.api.identity.onChanged(() => void refresh())
   }, [refresh])
+
+  // 弹窗拦截：读初始开关值 + 订阅「被拦截」提示。
+  useEffect(() => {
+    void window.api.app.getPopupBlocker().then((v) => setPopupBlocker(v))
+    return window.api.app.onPopupBlocked((url) => {
+      let host = url
+      try {
+        host = new URL(url).host || url
+      } catch {
+        /* 保底用原始串 */
+      }
+      setBlockedToast(t.popupBlocked(host))
+      setTimeout(() => setBlockedToast(null), 4000)
+    })
+  }, [t])
+
+  const togglePopupBlocker = async (): Promise<void> => {
+    const next = !popupBlocker
+    setPopupBlocker(next)
+    try {
+      const applied = await window.api.app.setPopupBlocker(next)
+      setPopupBlocker(applied)
+    } catch (e) {
+      setErr(String(e))
+      setPopupBlocker(!next)
+    }
+  }
 
   /** 复制 + 2 秒后自动消失的反馈。key 用来区分是哪个按钮被点了。 */
   const copy = async (key: string, text: string): Promise<void> => {
@@ -196,7 +226,24 @@ function App(): React.JSX.Element {
           <b>{t.agentAccess}</b>
           <span>{mcp?.codexInstalled ? t.codexConfigured : t.notConfigured}</span>
         </div>
+        <div className="stat">
+          <b>{t.popupBlocker}</b>
+          <span>
+            <button
+              className={`toggle ${popupBlocker ? 'on' : ''}`}
+              role="switch"
+              aria-checked={popupBlocker}
+              title={t.popupBlockerHint}
+              onClick={() => void togglePopupBlocker()}
+            >
+              <i />
+              {popupBlocker ? t.popupBlockerOn : t.popupBlockerOff}
+            </button>
+          </span>
+        </div>
       </div>
+
+      {blockedToast && <div className="toast">{blockedToast}</div>}
 
       {err && <div className="err">{err}</div>}
 

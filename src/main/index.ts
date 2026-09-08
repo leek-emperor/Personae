@@ -109,6 +109,13 @@ function registerIpc(): void {
   ipcMain.handle('app:setLanguage', (_e, lang: string) => {
     identityManager.setLanguage(lang)
   })
+
+  // 弹窗拦截开关：默认开，与主流浏览器一致。
+  ipcMain.handle('app:getPopupBlocker', () => identityManager.popupBlockerEnabled())
+  ipcMain.handle('app:setPopupBlocker', (_e, enabled: boolean) => {
+    identityManager.setPopupBlocker(!!enabled)
+    return identityManager.popupBlockerEnabled()
+  })
 }
 
 app.whenReady().then(async () => {
@@ -124,6 +131,9 @@ app.whenReady().then(async () => {
   identityManager.onChange(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('identity:changed')
+      // 有被拦截的弹窗则单独推给界面做提示（读一次即消费）
+      const blocked = identityManager.takeBlockedPopup()
+      if (blocked) mainWindow.webContents.send('app:popupBlocked', blocked.url)
     }
     refreshBridgeFile()
   })

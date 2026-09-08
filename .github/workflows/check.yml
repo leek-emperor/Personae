@@ -25,7 +25,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # 24：单测用 node:test 直接跑 .ts，TS 类型擦除默认开启需要 ≥ 23.6。
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -50,6 +51,8 @@ jobs:
       - run: pnpm lint
 
       - run: pnpm typecheck
+
+      - run: pnpm test
 
       - name: 打包冒烟
         if: ${{ inputs.pack }}
