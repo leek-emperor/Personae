@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { enableCdp, discoverCdpPort, listTargets } from './cdp'
 import { identityManager, DEFAULT_HOME } from './identity'
+import { secretStore } from './secret-store'
 import {
   startAgentBridge,
   stopAgentBridge,
@@ -70,6 +71,14 @@ function registerIpc(): void {
     return true
   })
 
+  ipcMain.handle('identity:setProxy', async (_e, id: string, input: unknown) =>
+    identityManager.setProxy(id, input as Parameters<typeof identityManager.setProxy>[1])
+  )
+
+  ipcMain.handle('identity:clearProxy', async (_e, id: string) => identityManager.clearProxy(id))
+
+  ipcMain.handle('identity:testProxy', async (_e, id: string) => identityManager.testProxy(id))
+
   ipcMain.handle('agent:info', async () => {
     let cdpPort: number | null = null
     let cdpError: string | null = null
@@ -126,6 +135,22 @@ app.whenReady().then(async () => {
   })
 
   await identityManager.load()
+  // 预加载密码存储缓存，使 list() 里的 hasPassword / secretEncrypted 同步可靠
+  await secretStore.init()
+
+  // 代理认证：带账密的代理需要 HTTP 407 认证，Chromium 触发 app 级 'login' 事件。
+  // 只处理 isProxy 的认证，按触发的 webContents 反查所属身份并回填其凭据；
+  // 非代理认证（如站点 basic auth）不介入，交还默认行为。
+  app.on('login', (event, webContents, _details, authInfo, callback) => {
+    if (!authInfo.isProxy) return // 站点认证：放行默认处理
+    const id = webContents ? identityManager.identityOfWebContents(webContents.id) : null
+    if (!id) return
+    event.preventDefault()
+    void identityManager.proxyCredentials(id).then((cred) => {
+      if (cred) callback(cred.username, cred.password)
+      else callback() // 无凭据：放弃认证，让请求按失败处理
+    })
+  })
 
   // 身份状态变化 → 通知渲染层 + 刷新给外部 agent 的发现文件
   identityManager.onChange(() => {
