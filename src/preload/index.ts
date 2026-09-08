@@ -8,6 +8,9 @@ const api = {
     open: (id: string) => ipcRenderer.invoke('identity:open', id),
     close: (id: string) => ipcRenderer.invoke('identity:close', id),
     remove: (id: string) => ipcRenderer.invoke('identity:remove', id),
+    setProxy: (id: string, input: unknown) => ipcRenderer.invoke('identity:setProxy', id, input),
+    clearProxy: (id: string) => ipcRenderer.invoke('identity:clearProxy', id),
+    testProxy: (id: string) => ipcRenderer.invoke('identity:testProxy', id),
     onChanged: (cb: () => void) => {
       const handler = (): void => cb()
       ipcRenderer.on('identity:changed', handler)

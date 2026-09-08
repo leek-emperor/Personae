@@ -720,6 +720,13 @@ table.kv.small td {
   background: color-mix(in srgb, var(--idc) 11%, transparent);
 }
 
+/* 代理徽标：中性青色，和身份色的 on 徽标区分开，一眼看出"这个身份走了代理"。 */
+.badge.proxy {
+  color: #6fd6e8;
+  border-color: color-mix(in srgb, #38d0e8 40%, transparent);
+  background: color-mix(in srgb, #38d0e8 10%, transparent);
+}
+
 .ellip {
   max-width: 100%;
   overflow: hidden;
@@ -928,3 +935,50 @@ pre.prompt {
   color: var(--bg);
   background: var(--acc);
 }
+
+/* ── 代理面板 ──────────────────────────────────────────────── */
+
+/* select 复用 input 的视觉，保持表单一致 */
+select {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--fg);
+  padding: 9px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px rgba(91, 156, 255, 0.14);
+}
+
+.proxy-current {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #6fd6e8;
+}
+
+.proxy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.proxy-hint {
+  font-size: 11px;
+  color: var(--dim);
+  margin: 0;
+}
+
+/* 明文存储警告：琥珀色，不用红（红留给错误），但足够显眼提醒风险。 */
+.proxy-warn {
+  font-size: 11px;
+  color: #f2d59a;
+  margin: 0;
+}
+

@@ -72,8 +72,9 @@ agent prompt 也会跟着切换。
 pnpm test
 ```
 
-覆盖：`window.open` / 弹窗决策（`window-open.ts`）、地址栏 URL 规范化（`url-input.ts`）、
-Codex 配置的 TOML 段落拼接（`toml.ts`）、身份色板（`colors.ts`）。
+覆盖：`window.open` / 弹窗决策（`window-open.ts`）、代理输入解析（`proxy.ts`）、
+地址栏 URL 规范化（`url-input.ts`）、Codex 配置的 TOML 段落拼接（`toml.ts`）、
+身份色板（`colors.ts`）。
 
 打包：
 
@@ -203,6 +204,21 @@ claude mcp add personae \
 
 决策本身（`same-window` / `allow-child` / `ignore`）抽在纯函数 `src/main/window-open.ts` 里，有单测覆盖。
 
+## 每身份代理
+
+每个身份都能走各自的代理 —— 适合让同一站点的账号来自不同地区，或测试地域行为。**代理由你自备**（去 IPRoyal / Webshare / Bright Data 等买），Personae 只提供设置入口并把它接上。
+
+- **作用范围。** 代理通过 `session.setProxy` 设在该身份的 `persist:` partition 上，是真正的每身份粒度 —— 身份 A 可从美国 IP 出口，身份 B 从日本。不配则直连。
+- **支持。** HTTP / HTTPS / SOCKS5。可分字段填，也可把整串 `socks5://user:pass@host:port` 粘进「主机」框。
+- **认证。** 支持带账密的代理。凭据**绝不进** proxyRules 字符串（Chromium 不认 `user:pass@`），认证走 Electron 的 `login` 事件回填。
+- **密码加密存储。** 密码经 `safeStorage`（macOS 走 Keychain、Windows 走 DPAPI）存到 `userData/proxy-secrets.json`，绝不进 `identities.json`、也绝不回传渲染层。`safeStorage` 不可用时降级明文并在界面提示。
+- **测试连接。** 一个按钮用该身份的 session 请求 IP 回显服务，显示实际出口 IP，确认代理是否生效。
+- **WebRTC 防泄漏。** 配了代理的身份会应用 `setWebRTCIPHandlingPolicy('disable_non_proxied_udp')`，防止 WebRTC 绕过代理泄漏真实 IP。
+
+**这不是反检测浏览器。** 它只改变网络出口。除上面的 WebRTC 防护外，**不做**任何指纹伪造（Canvas / WebGL / UA / 时区 / 字体…），所以同一台机器上的多个身份仍共享同一套浏览器指纹。若平台靠指纹关联账号，仅靠代理是藏不住的。
+
+代理解析（`parseProxyInput` / `buildProxyRules`）是 `src/main/proxy.ts` 里的纯函数，有单测覆盖，包括「凭据绝不泄漏进 rules 字符串」。
+
 ## 开发中踩到的坑
 
 留在这里，因为它们大多不在文档里。
@@ -246,14 +262,17 @@ claude mcp add personae \
 - **运行时行为只在 macOS (arm64) 上实测过**，含打包产物。Windows 的打包已在 CI 上跑通（macOS + Windows 均能产出安装包），但应用本身从未在 Windows 上**实际运行**过，该平台的运行时行为未验证。Linux 不再作为构建目标。`bundle:ab` 只按当前平台捆绑。
 - **adhoc 签名不可分发**：默认产物只能在本机运行，给别人会被 Gatekeeper 拦。正式分发需要自备证书并开启公证。
 - **Codex 侧未用真实客户端验证**：MCP 协议流程是用脚本扮演客户端测通的（包括打包产物 + 无 Node 环境），但没有用真实的 codex 跑一遍。
+- **代理只改变网络出口，不改指纹。** 见[每身份代理](#每身份代理) —— 它不是反检测浏览器。
 
 ## 项目结构
 
 ```
 src/main/
   cdp.ts          CDP 端口开启与发现、targetId 获取
-  identity.ts     身份存档、窗口生命周期、导航栏 IPC
+  identity.ts     身份存档、窗口生命周期、导航栏 IPC、代理
   window-open.ts  window.open / target=_blank 的纯决策（有单测）
+  proxy.ts        代理输入解析 → proxyRules（有单测）
+  secret-store.ts safeStorage 加密存代理密码
   url-input.ts    地址栏输入 → URL 规范化（有单测）
   toml.ts         Codex 配置的 TOML 段落拼接（有单测）
   agent-bridge.ts 本地 HTTP bridge + 发现文件
@@ -268,6 +287,7 @@ src/preload/
 src/renderer/
   chrome.html     导航栏 UI
   src/App.tsx     身份管理与接入面板
+  src/ProxyPanel.tsx     每身份代理设置 UI
   src/agent-prompt.ts    生成那段可直接粘给 agent 的 prompt
   src/assets/fonts/      自托管的拉丁子集字体（CSP 挡掉了外部字体 CDN，
                          中文回退到系统 PingFang）

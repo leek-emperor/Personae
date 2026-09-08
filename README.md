@@ -95,9 +95,9 @@ locked down by tests. They run on `node:test` with no extra dependencies:
 pnpm test
 ```
 
-Covered: the `window.open` / popup decision (`window-open.ts`), address-bar URL
-normalization (`url-input.ts`), the Codex-config TOML splice (`toml.ts`), and the
-identity palette (`colors.ts`).
+Covered: the `window.open` / popup decision (`window-open.ts`), the proxy input
+parsing (`proxy.ts`), address-bar URL normalization (`url-input.ts`), the
+Codex-config TOML splice (`toml.ts`), and the identity palette (`colors.ts`).
 
 Packaging:
 
@@ -228,6 +228,21 @@ The approach here treats a popup as a first-class child of its identity, without
 
 The decision itself (`same-window` / `allow-child` / `ignore`) lives in a pure function, `src/main/window-open.ts`, and is unit-tested.
 
+## Proxy per identity
+
+Each identity can route through its own proxy — useful when you want the same site's accounts to come from different regions, or to test geo-behaviour. **You bring your own proxy** (buy it from IPRoyal / Webshare / Bright Data / whoever); Personae only provides the setting and wires it up.
+
+- **Where it applies.** A proxy is set on the identity's `persist:` partition via `session.setProxy`, so it's genuinely per-identity — identity A can exit via a US IP while identity B exits via Japan. No proxy set means direct connection.
+- **Supported.** HTTP, HTTPS and SOCKS5. You can fill the fields separately, or paste a full string like `socks5://user:pass@host:port` into the host box.
+- **Authentication.** Proxies with a username/password work. Credentials **never** go into the proxy rules string (Chromium rejects `user:pass@` there); auth is answered through Electron's `login` event instead.
+- **Passwords are encrypted at rest.** The password is stored via `safeStorage` (Keychain on macOS, DPAPI on Windows) in `userData/proxy-secrets.json`, never in `identities.json` and never sent back to the renderer. Where `safeStorage` is unavailable it falls back to plaintext and the UI says so.
+- **Test connection.** A button fetches an IP-echo service through that identity's session and shows the actual egress IP, so you can confirm the proxy is really in effect.
+- **WebRTC leak guard.** For any identity with a proxy, `setWebRTCIPHandlingPolicy('disable_non_proxied_udp')` is applied so WebRTC can't bypass the proxy and leak your real IP.
+
+**This is not an anti-detect browser.** It changes your network exit, nothing more. Beyond the WebRTC guard above, it does **not** do fingerprint spoofing (Canvas / WebGL / UA / timezone / fonts…), so several identities on the same machine still share the same browser fingerprint. If a platform correlates accounts by fingerprint, a proxy alone won't hide that.
+
+The proxy parsing (`parseProxyInput` / `buildProxyRules`) is a pure function in `src/main/proxy.ts` and is unit-tested, including that credentials never leak into the rules string.
+
 ## Things that bit us
 
 Kept here because most of them aren't documented anywhere.
@@ -271,14 +286,17 @@ Two more: on Retina displays `capturePage` outputs at devicePixelRatio (asking f
 - **Runtime behaviour is only verified on macOS (arm64)**, including the packaged build. Windows packaging succeeds in CI (macOS + Windows are both built and produce installers), but the app has never actually been **run** on Windows, so runtime behaviour there is unverified. Linux is not a build target. `bundle:ab` bundles for the current platform only.
 - **Adhoc-signed builds are not distributable**: they run only on the build machine and are blocked by Gatekeeper elsewhere. Real distribution needs your own certificate and notarization.
 - **The Codex side has not been verified with a real client**: the MCP flow was tested with a script acting as the client (including the packaged build in a Node-free environment), but never against an actual codex run.
+- **Proxy support only changes the network exit, not the fingerprint.** See [Proxy per identity](#proxy-per-identity) — it is not an anti-detect browser.
 
 ## Project layout
 
 ```
 src/main/
   cdp.ts          CDP port setup/discovery, targetId resolution
-  identity.ts     identity storage, window lifecycle, nav-bar IPC
+  identity.ts     identity storage, window lifecycle, nav-bar IPC, proxy
   window-open.ts  pure decision for window.open / target=_blank (unit-tested)
+  proxy.ts        proxy input parsing → proxyRules (unit-tested)
+  secret-store.ts safeStorage-backed proxy password storage
   url-input.ts    address-bar input → URL normalization (unit-tested)
   toml.ts         TOML section splice for the Codex config (unit-tested)
   agent-bridge.ts local HTTP bridge + discovery file
@@ -293,6 +311,7 @@ src/preload/
 src/renderer/
   chrome.html     navigation-bar UI
   src/App.tsx     identity management and connection panel
+  src/ProxyPanel.tsx     per-identity proxy settings UI
   src/agent-prompt.ts    builds the copy-and-paste prompt for agents
   src/assets/fonts/      self-hosted latin subsets (the CSP blocks
                          external font CDNs; CJK falls back to the system)

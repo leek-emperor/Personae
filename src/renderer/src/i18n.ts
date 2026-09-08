@@ -102,7 +102,26 @@ const zh = {
   popupBlockerOff: '已关闭',
   popupBlockerHint:
     '拦截网页脚本自动弹出的窗口（广告 / pop-under）。由你点击触发的弹窗（如 OAuth 登录）不受影响，会作为归属该身份的子窗口正常打开。',
-  popupBlocked: (host: string) => `已拦截来自 ${host} 的自动弹窗`
+  popupBlocked: (host: string) => `已拦截来自 ${host} 的自动弹窗`,
+
+  // ── 代理 ──────────────────────────────────────────────
+  proxyBadge: (scheme: string) => `代理·${scheme}`,
+  proxySummary: '代理',
+  proxyNone: '未设置（直连）',
+  proxyScheme: '协议',
+  proxyHost: '代理主机，如 gate.example.com',
+  proxyPort: '端口',
+  proxyUser: '用户名（可选）',
+  proxyPass: '密码（可选）',
+  proxyPassKept: '密码已保存（留空则不变）',
+  proxyPasteHint: '也可直接把整串粘到「主机」框，如 socks5://user:pass@host:port。',
+  proxyPlaintextWarn: '本机不支持加密存储，密码以明文保存。',
+  proxySave: '保存',
+  proxyTest: '测试连接',
+  proxyTesting: '测试中…',
+  proxyClear: '清除',
+  proxyTestOk: (ip: string) => `连接成功，出口 IP：${ip}`,
+  proxyTestFail: (e: string) => `连接失败：${e}`
 }
 
 /** 英文表必须覆盖中文表的每一个 key，否则 typecheck 失败。 */
@@ -191,7 +210,27 @@ const en: Dict = {
   popupBlockerOff: 'Off',
   popupBlockerHint:
     'Blocks windows opened automatically by page scripts (ads / pop-unders). Popups you trigger by clicking (e.g. an OAuth sign-in) are unaffected — they open as a child window belonging to that identity.',
-  popupBlocked: (host: string) => `Blocked an automatic popup from ${host}`
+  popupBlocked: (host: string) => `Blocked an automatic popup from ${host}`,
+
+  proxyBadge: (scheme: string) => `proxy·${scheme}`,
+  proxySummary: 'Proxy',
+  proxyNone: 'not set (direct)',
+  proxyScheme: 'Scheme',
+  proxyHost: 'Proxy host, e.g. gate.example.com',
+  proxyPort: 'Port',
+  proxyUser: 'Username (optional)',
+  proxyPass: 'Password (optional)',
+  proxyPassKept: 'Password saved (leave blank to keep)',
+  proxyPasteHint:
+    'You can also paste a full string into the host box, e.g. socks5://user:pass@host:port.',
+  proxyPlaintextWarn:
+    'Encrypted storage is unavailable here; the password is stored in plain text.',
+  proxySave: 'Save',
+  proxyTest: 'Test connection',
+  proxyTesting: 'Testing…',
+  proxyClear: 'Clear',
+  proxyTestOk: (ip: string) => `Connected. Egress IP: ${ip}`,
+  proxyTestFail: (e: string) => `Failed: ${e}`
 }
 
 export const DICTS: Record<Lang, Dict> = { en, zh }

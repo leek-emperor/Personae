@@ -4,6 +4,29 @@ export type ChildWindowState = {
   title: string | null
 }
 
+export type ProxyScheme = 'http' | 'https' | 'socks5'
+
+/** 代理状态（不含密码明文） */
+export type ProxyState = {
+  scheme: ProxyScheme
+  host: string
+  port: number
+  username?: string
+  hasPassword: boolean
+  secretEncrypted: boolean
+}
+
+/** 设置代理时从界面传入的字段（密码可选，编辑时不重填则不改） */
+export type ProxyInput = {
+  scheme?: string
+  host?: string
+  port?: string | number
+  username?: string
+  password?: string
+}
+
+export type ProxyTestResult = { ok: boolean; ip?: string; error?: string }
+
 export type IdentityState = {
   id: string
   name: string
@@ -15,6 +38,7 @@ export type IdentityState = {
   currentUrl: string | null
   title: string | null
   children: ChildWindowState[]
+  proxy: ProxyState | null
 }
 
 export type AgentInfo = {
@@ -59,6 +83,9 @@ export type Api = {
     open: (id: string) => Promise<IdentityState>
     close: (id: string) => Promise<boolean>
     remove: (id: string) => Promise<boolean>
+    setProxy: (id: string, input: ProxyInput) => Promise<IdentityState>
+    clearProxy: (id: string) => Promise<IdentityState>
+    testProxy: (id: string) => Promise<ProxyTestResult>
     onChanged: (cb: () => void) => () => void
   }
   agent: {

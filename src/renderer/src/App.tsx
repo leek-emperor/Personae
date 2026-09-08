@@ -9,6 +9,7 @@ import type {
 import { buildAgentPrompt } from './agent-prompt'
 import { identityColor } from '../../shared/colors'
 import { DICTS, detectLang, saveLang, type Lang } from './i18n'
+import { ProxyPanel } from './ProxyPanel'
 
 /**
  * 从 URL 取 host 用于展示。
@@ -297,6 +298,14 @@ function App(): React.JSX.Element {
                       <span className={`badge ${it.isOpen ? 'on' : ''}`}>
                         {it.isOpen ? t.live : t.idle}
                       </span>
+                      {it.proxy && (
+                        <span
+                          className="badge proxy"
+                          title={`${it.proxy.scheme}://${it.proxy.host}:${it.proxy.port}`}
+                        >
+                          {t.proxyBadge(it.proxy.scheme)}
+                        </span>
+                      )}
                     </div>
                     <div className="row">
                       <button
@@ -360,6 +369,15 @@ function App(): React.JSX.Element {
                       </tr>
                     </tbody>
                   </table>
+
+                  <ProxyPanel
+                    t={t}
+                    proxy={it.proxy}
+                    busy={busy === it.id}
+                    onSave={(input) => act(it.id, () => window.api.identity.setProxy(it.id, input))}
+                    onClear={() => act(it.id, () => window.api.identity.clearProxy(it.id))}
+                    onTest={() => window.api.identity.testProxy(it.id)}
+                  />
 
                   {it.isOpen && it.targetId && (
                     <details>

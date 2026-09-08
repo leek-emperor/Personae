@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView, session, app, ipcMain } from 'electron'
+import { BrowserWindow, WebContentsView, session, app, ipcMain, net } from 'electron'
 import { writeFile, readFile, mkdir } from 'fs/promises'
 import { join, dirname } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -6,11 +6,27 @@ import { getTargetId } from './cdp'
 import { identityColor } from '../shared/colors'
 import { classifyWindowOpen, type WindowOpenDisposition } from './window-open'
 import { normalizeInput } from './url-input'
+import { parseProxyInput, buildProxyRules, type ProxyScheme, type ProxyFields } from './proxy'
+import { secretStore } from './secret-store'
 
 export const DEFAULT_HOME = 'https://www.baidu.com'
 
 /** 顶栏高度，与 chrome.html 里的 --h 保持一致 */
 const CHROME_HEIGHT = 44
+
+/** 测试连接时用来回显出口 IP 的服务（返回 {"ip":"x.x.x.x"}） */
+const IP_ECHO_URL = 'https://api.ipify.org?format=json'
+
+/**
+ * 存进 identities.json 的代理配置。**不含密码明文** —— 密码由 secretStore
+ * 单独加密存储。username 属于弱敏感，跟随明文存（多数代理面板本身也明文展示）。
+ */
+export type ProxyConfig = {
+  scheme: ProxyScheme
+  host: string
+  port: number
+  username?: string
+}
 
 export type Identity = {
   /** 稳定 id，作为 partition 名与 agent-browser session 名的基础 */
@@ -18,9 +34,23 @@ export type Identity = {
   name: string
   homeUrl: string
   createdAt: number
+  /** 可选代理出口；不设则该身份走直连 */
+  proxy?: ProxyConfig
 }
 
-export type IdentityState = Identity & {
+/** 回传给渲染层 / agent 的代理视图：绝不含密码，只用布尔位表达状态 */
+export type ProxyState = {
+  scheme: ProxyScheme
+  host: string
+  port: number
+  username?: string
+  /** 是否已保存密码 */
+  hasPassword: boolean
+  /** 已保存的密码是否为加密态（false 说明降级明文，界面据此提示） */
+  secretEncrypted: boolean
+}
+
+export type IdentityState = Omit<Identity, 'proxy'> & {
   partition: string
   isOpen: boolean
   /** CDP targetId，窗口打开后才有；窗口重建会变 */
@@ -32,6 +62,8 @@ export type IdentityState = Identity & {
    * 每个子窗口是独立的 CDP target，agent 可用 targetId 单独寻址。
    */
   children: ChildWindowState[]
+  /** 代理状态（不含密码明文）；未配置则为 null */
+  proxy: ProxyState | null
 }
 
 /** 一个被追踪的子窗口（弹窗）。归属某个身份，随主窗口关闭而消失。 */
@@ -174,9 +206,23 @@ class IdentityManager {
           targetId: this.targetIds.get(it.id) ?? null,
           currentUrl: contentAlive ? cwc.getURL() : null,
           title: contentAlive ? cwc.getTitle() : null,
-          children: this.childStates(it.id)
+          children: this.childStates(it.id),
+          proxy: this.proxyStateOf(it)
         }
       })
+  }
+
+  /** 把内部 proxy 配置 + 密码存储状态，组合成不含明文密码的对外视图。 */
+  private proxyStateOf(it: Identity): ProxyState | null {
+    if (!it.proxy) return null
+    return {
+      scheme: it.proxy.scheme,
+      host: it.proxy.host,
+      port: it.proxy.port,
+      username: it.proxy.username,
+      hasPassword: secretStore.has(it.id),
+      secretEncrypted: secretStore.isEncrypted(it.id)
+    }
   }
 
   /** 收集某身份当前存活子窗口的状态（供列表 / agent 使用）。 */
@@ -246,6 +292,9 @@ class IdentityManager {
     const partition = this.partitionOf(id)
     // 显式先建 session，确保 partition 在 window 创建前就存在
     const sess = session.fromPartition(partition)
+    // 应用代理（或显式清除）—— 必须在内容视图 loadURL 之前，
+    // 否则首个请求会走直连，代理配置对它不生效。
+    await this.applyProxyToSession(identity)
     void sess
 
     // ── 窗口结构：顶栏 + 内容区 ────────────────────────────────────
@@ -291,6 +340,13 @@ class IdentityManager {
 
     win.contentView.addChildView(chrome)
     win.contentView.addChildView(content)
+
+    // WebRTC 防泄漏：配了代理的身份，禁止 WebRTC 走非代理的 UDP 通道，
+    // 否则真实 IP 会绕过代理从 RTCPeerConnection 的候选里暴露出去。
+    // 未配代理则保持默认，不影响正常音视频通话。
+    if (identity.proxy) {
+      content.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp')
+    }
 
     // 外壳窗口自身必须加载点东西，并且必须有非空 title。
     //
@@ -615,6 +671,132 @@ class IdentityManager {
     this.emit()
   }
 
+  // ── 代理 ────────────────────────────────────────────────────────
+
+  /**
+   * 把某身份的代理配置应用到它的 partition session。
+   * 未配置代理时显式设为 direct —— 否则复用了同名 partition 的旧 session
+   * 可能残留上一次的代理配置。
+   */
+  private async applyProxyToSession(identity: Identity): Promise<void> {
+    const sess = session.fromPartition(this.partitionOf(identity.id))
+    if (identity.proxy) {
+      await sess.setProxy({ proxyRules: buildProxyRules(identity.proxy) })
+    } else {
+      await sess.setProxy({ mode: 'direct' })
+    }
+    await sess.forceReloadProxyConfig()
+  }
+
+  /**
+   * 设置（或更新）某身份的代理。密码单独加密存储，绝不进 identities.json。
+   * 若窗口已打开，即时对其 session 生效并同步 WebRTC 策略，无需重开窗口。
+   */
+  async setProxy(id: string, input: ProxyFields | string): Promise<IdentityState> {
+    const identity = this.identities.get(id)
+    if (!identity) throw new Error(`身份不存在: ${id}`)
+
+    const parsed = parseProxyInput(input)
+    if ('error' in parsed) throw new Error(parsed.error)
+
+    identity.proxy = {
+      scheme: parsed.scheme,
+      host: parsed.host,
+      port: parsed.port,
+      username: parsed.username
+    }
+    // 密码：给了就存，没给则保留原有（编辑时用户常不重填密码）
+    if (parsed.password !== undefined) {
+      await secretStore.set(id, parsed.password)
+    } else if (!parsed.username) {
+      // 既无用户名也无密码：视为无认证代理，清掉可能的旧密码
+      await secretStore.remove(id)
+    }
+
+    await this.persist()
+    await this.applyProxyToSession(identity)
+
+    // 已开窗口：即时同步 WebRTC 策略
+    const content = this.contents.get(id)
+    if (content && !content.webContents.isDestroyed()) {
+      content.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp')
+    }
+
+    this.emit()
+    return this.list().find((x) => x.id === id)!
+  }
+
+  /** 清除某身份的代理，恢复直连。 */
+  async clearProxy(id: string): Promise<IdentityState> {
+    const identity = this.identities.get(id)
+    if (!identity) throw new Error(`身份不存在: ${id}`)
+
+    delete identity.proxy
+    await secretStore.remove(id)
+    await this.persist()
+    await this.applyProxyToSession(identity)
+
+    const content = this.contents.get(id)
+    if (content && !content.webContents.isDestroyed()) {
+      // 恢复默认 WebRTC 行为
+      content.webContents.setWebRTCIPHandlingPolicy('default')
+    }
+
+    this.emit()
+    return this.list().find((x) => x.id === id)!
+  }
+
+  /**
+   * 测试某身份的代理是否生效：用该 partition 的 session 请求一个回显 IP 的服务，
+   * 返回实际出口 IP。
+   *
+   * 认证：window 的请求走 app.on('login')（能反查 webContents → 身份）；
+   * 但这里是无 webContents 的 net.request，app 级 login 拿不到身份，
+   * 所以在请求对象上直接挂 'login' 回填凭据。
+   */
+  async testProxy(id: string): Promise<{ ok: boolean; ip?: string; error?: string }> {
+    const identity = this.identities.get(id)
+    if (!identity) throw new Error(`身份不存在: ${id}`)
+
+    const sess = session.fromPartition(this.partitionOf(id))
+    // 确保 session 上的代理配置是最新的（可能窗口还没开过）
+    await this.applyProxyToSession(identity)
+    const cred = await this.proxyCredentials(id)
+
+    return new Promise((resolve) => {
+      const req = net.request({ url: IP_ECHO_URL, session: sess, useSessionCookies: false })
+      let body = ''
+      const timer = setTimeout(() => {
+        req.abort()
+        resolve({ ok: false, error: '测试超时（15s）—— 代理可能不可达或认证失败' })
+      }, 15_000)
+
+      // 代理认证：net.request 无 webContents，只能在请求上直接回填
+      req.on('login', (authInfo, callback) => {
+        if (authInfo.isProxy && cred) callback(cred.username, cred.password)
+        else callback()
+      })
+
+      req.on('response', (res) => {
+        res.on('data', (c) => (body += c))
+        res.on('end', () => {
+          clearTimeout(timer)
+          try {
+            const ip = JSON.parse(body).ip as string
+            resolve({ ok: true, ip })
+          } catch {
+            resolve({ ok: false, error: `响应无法解析: ${body.slice(0, 200)}` })
+          }
+        })
+      })
+      req.on('error', (err) => {
+        clearTimeout(timer)
+        resolve({ ok: false, error: err.message })
+      })
+      req.end()
+    })
+  }
+
   /** 供 MCP / 工具层查询：身份 → CDP target 映射 */
   mapping(): Array<{
     id: string
@@ -625,6 +807,7 @@ class IdentityManager {
     url: string | null
     isOpen: boolean
     children: ChildWindowState[]
+    proxy: ProxyState | null
   }> {
     return this.list().map((it) => ({
       id: it.id,
@@ -634,7 +817,8 @@ class IdentityManager {
       targetId: it.targetId,
       url: it.currentUrl,
       isOpen: it.isOpen,
-      children: it.children
+      children: it.children,
+      proxy: it.proxy
     }))
   }
 
@@ -648,6 +832,32 @@ class IdentityManager {
       if (!view.webContents.isDestroyed() && view.webContents.id === wcId) return id
     }
     return null
+  }
+
+  /**
+   * 由内容视图或其子窗口的 webContents.id 反查所属身份。
+   * 供 app.on('login') 定位是哪个身份触发了代理认证。
+   */
+  identityOfWebContents(wcId: number): string | null {
+    for (const [id, view] of this.contents) {
+      if (!view.webContents.isDestroyed() && view.webContents.id === wcId) return id
+    }
+    for (const [id, set] of this.children) {
+      for (const win of set) {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed() && win.webContents.id === wcId) {
+          return id
+        }
+      }
+    }
+    return null
+  }
+
+  /** 取某身份的代理认证凭据（供 app.on('login') 回填）。无则返回 null。 */
+  async proxyCredentials(id: string): Promise<{ username: string; password: string } | null> {
+    const identity = this.identities.get(id)
+    if (!identity?.proxy?.username) return null
+    const password = (await secretStore.get(id)) ?? ''
+    return { username: identity.proxy.username, password }
   }
 
   /**
