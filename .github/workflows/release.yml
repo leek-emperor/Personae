@@ -41,6 +41,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  packages: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -310,11 +311,32 @@ jobs:
           pnpm mcp:sync
           pnpm mcp:check
 
-      - name: 发布 npm launcher
+      - name: 发布 npm launcher（未发布版本）
         working-directory: packages/personae-mcp
-        run: npm publish --access public --provenance
+        run: |
+          set -euo pipefail
+          PACKAGE=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PACKAGE@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "npm version already exists; skipping npm publish"
+          else
+            npm publish --access public --provenance
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # GitHub Packages 是 npm 官方源之外的公开镜像；官方 MCP Registry
+      # 仍只引用 registry.npmjs.org 的包，用户现有 npx 安装命令不变。
+      - name: 镜像 npm launcher 到 GitHub Packages
+        working-directory: packages/personae-mcp
+        run: npm publish --registry=https://npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 将 GitHub Package 设为公开
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api --method PATCH "/user/packages/npm/%40leek-emperor%2Fpersonae-mcp" -f visibility=public
 
       - name: 安装 mcp-publisher
         run: |
