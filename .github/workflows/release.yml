@@ -327,11 +327,16 @@ jobs:
 
       # GitHub Packages 是 npm 官方源之外的公开镜像；官方 MCP Registry
       # 仍只引用 registry.npmjs.org 的包，用户现有 npx 安装命令不变。
+      - name: 配置 GitHub Packages registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: '@leek-emperor'
+
       - name: 镜像 npm launcher 到 GitHub Packages
         working-directory: packages/personae-mcp
-        run: |
-          printf '%s\n' "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> "${NPM_CONFIG_USERCONFIG}"
-          npm publish --registry=https://npm.pkg.github.com
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
