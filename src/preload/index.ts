@@ -25,7 +25,14 @@ const api = {
   app: {
     // 语言由主界面决定，主进程负责广播给各身份窗口的顶栏 ——
     // 顶栏是独立文档，读不到主界面的 localStorage。
-    setLanguage: (lang: string) => ipcRenderer.invoke('app:setLanguage', lang)
+    setLanguage: (lang: string) => ipcRenderer.invoke('app:setLanguage', lang),
+    getPopupBlocker: () => ipcRenderer.invoke('app:getPopupBlocker'),
+    setPopupBlocker: (enabled: boolean) => ipcRenderer.invoke('app:setPopupBlocker', enabled),
+    onPopupBlocked: (cb: (url: string) => void) => {
+      const handler = (_e: unknown, url: string): void => cb(url)
+      ipcRenderer.on('app:popupBlocked', handler)
+      return () => ipcRenderer.removeListener('app:popupBlocked', handler)
+    }
   }
 }
 

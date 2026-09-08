@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir, copyFile } from 'fs/promises'
 import { homedir } from 'os'
 import { agentBrowserPath } from './agent-bridge'
+import { spliceTomlSection } from './toml'
 
 /**
  * 零依赖的 agent 接入配置。
@@ -181,39 +182,6 @@ export async function installCodexConfig(): Promise<{
       error: err instanceof Error ? err.message : String(err)
     }
   }
-}
-
-/**
- * 从 TOML 文本里摘掉某个 mcp_servers 段。
- *
- * 范围是「该段 header 到下一个顶层 [ 段之前」，其中要排除它自己的子表
- * （形如 [mcp_servers.<key>.env]），否则会在 env 子表处提前截断，
- * 留下半截配置。
- *
- * replacement 为 null 表示删除该段。
- */
-function spliceTomlSection(raw: string, key: string, replacement: string | null): string {
-  const header = `[mcp_servers.${key}]`
-  if (!raw.includes(header)) return raw
-
-  const lines = raw.split('\n')
-  const start = lines.findIndex((l) => l.trim() === header)
-  if (start === -1) return raw
-
-  let end = lines.length
-  for (let i = start + 1; i < lines.length; i++) {
-    const t = lines[i].trim()
-    if (t.startsWith('[') && !t.startsWith(`[mcp_servers.${key}`)) {
-      end = i
-      break
-    }
-  }
-
-  const head = lines.slice(0, start)
-  const tail = lines.slice(end)
-  return replacement === null
-    ? [...head, ...tail].join('\n')
-    : [...head, replacement, '', ...tail].join('\n')
 }
 
 export async function isCodexConfigured(): Promise<boolean> {

@@ -63,6 +63,18 @@ pnpm dev
 界面默认英文。点右上角 **EN / 中** 可切换为中文，选择会被记住，身份窗口的顶栏和复制出去的
 agent prompt 也会跟着切换。
 
+## 测试
+
+那些微妙、且大多没有文档的判定逻辑，都抽在小巧的纯模块里，便于用测试锁住。
+基于 `node:test`，无需额外依赖：
+
+```bash
+pnpm test
+```
+
+覆盖：`window.open` / 弹窗决策（`window-open.ts`）、地址栏 URL 规范化（`url-input.ts`）、
+Codex 配置的 TOML 段落拼接（`toml.ts`）、身份色板（`colors.ts`）。
+
 打包：
 
 ```bash
@@ -134,6 +146,8 @@ claude mcp add personae \
 
 `click` / `fill` 传 `@eN` 时会自动前置一次 snapshot，因为 **ref 只在单个 agent-browser 进程内有效**，跨进程复用必然报 `Unknown ref`。需要多步操作时用 `act` 把它们放进同一个 batch。
 
+**操作弹出的子窗口。** 当页面弹出窗口（OAuth 登录、分享对话框等），它会成为归属同一身份的子窗口（见[弹窗与 OAuth](#弹窗与-oauth)）。子窗口是独立的 CDP target，在 `list_identities` 里以 `children` 列在该身份下。所有「操作 / 读取」类工具都接受可选的 `target` 参数 —— 传子窗口的 `targetId`（或序号）即可操作弹窗，不传则照旧操作主窗口。
+
 ## 架构
 
 ```
@@ -176,6 +190,19 @@ claude mcp add personae \
 
 `BrowserWindow` 嵌套和 `BrowserView` 也都能实现，agent 同样能操作（都实测过）。选 `WebContentsView` 的理由是：`BrowserView` 在 Electron 类型定义里已标记 `@deprecated`；嵌套窗口在 macOS 是独立原生窗口，拖动/缩放/最小化都要手动同步 bounds，做不出「一个浏览器窗口」的观感。
 
+## 弹窗与 OAuth
+
+页面可以用 `window.open(url, name, features)` 弹窗 —— OAuth 登录、「分享到…」对话框等。这些必须是**真实窗口**：OAuth 弹窗靠 `window.opener` 加 `postMessage`/`window.close()` 回传结果，压成页内导航就会断掉流程。
+
+这里的做法是把弹窗当作身份的一等子成员来接住，且**从不去猜「这是不是 OAuth 窗口」**：
+
+- **同窗 vs 子窗口。** 普通 `<a target="_blank">` 或不带 features 的 `window.open` 仍走本窗口导航（无 opener、不新建 target），安全且维持「一身份一主 target」。只有 `new-window` disposition（即带 window features 的 `window.open`）才成为真实子窗口。
+- **归属该身份。** 子窗口以该身份 shell 为 `parent`、复用**同一 partition** 创建，于是它浮在正确的窗口上、cookie 也落进正确账号。`window.opener` 被保留，各种 OAuth 都能跑通。`outlivesOpener: false` 保证关掉身份时弹窗一并关闭。
+- **弹窗拦截（默认开）。** 区分「该弹 / 不该弹」的唯一依据是**用户激活** —— 最近一秒内是否有真实的点击/按键。这正是主流浏览器弹窗拦截器的做法：不看域名、不看内容。脚本自动弹窗（无前置输入的 pop-under）会被拦下，并以一条不打扰的提示告知；顶栏可关闭拦截。
+- **agent 能操作它。** 每个子窗口是独立 CDP target，解析出权威 `targetId` 后以 `children` 列在该身份下。所有 MCP 工具都接受可选 `target` 指定某个弹窗。对外的「一身份一主 target」契约没有被破坏 —— 只是诚实地扩展为「一主多子」。
+
+决策本身（`same-window` / `allow-child` / `ignore`）抽在纯函数 `src/main/window-open.ts` 里，有单测覆盖。
+
 ## 开发中踩到的坑
 
 留在这里，因为它们大多不在文档里。
@@ -213,8 +240,8 @@ claude mcp add personae \
 ## 已知限制与安全说明
 
 - **隔离是约定层，不是架构层。** CDP 端口没有访问控制。虽然只监听回环且端口随机，但任何能连上它的本地进程都可以操作**所有**身份，跨越 partition 边界。这是「让外部 agent 能接入」的直接代价。不要在多用户共享的机器上处理敏感账号。
-- **所有跳转被拦在窗口内。** `setWindowOpenHandler` 把 `window.open` 和 `target="_blank"` 都改成在当前窗口导航，以保证一个身份始终对应一个 target。代价是**会破坏依赖弹窗的 OAuth 登录流程**。
-- **每个身份占 3 个 CDP page target**（外壳 + 顶栏 + 内容），身份数 × 3。
+- **普通链接在窗口内导航。** `setWindowOpenHandler` 把 `window.open` 和 `target="_blank"` 链接改成在当前窗口导航，以保证一个身份始终对应一个主 target。真正的弹窗（带 features 的 `window.open`，如 OAuth）是例外 —— 它们作为被追踪的子窗口打开，见[弹窗与 OAuth](#弹窗与-oauth)。
+- **每个身份至少占 3 个 CDP page target**（外壳 + 顶栏 + 内容），每多一个打开的弹窗子窗口再加一个，约为身份数 × 3。
 - **捆绑的 agent-browser 版本被钉死**在构建时的版本，上游修复不会自动获得。
 - **运行时行为只在 macOS (arm64) 上实测过**，含打包产物。Windows 的打包已在 CI 上跑通（macOS + Windows 均能产出安装包），但应用本身从未在 Windows 上**实际运行**过，该平台的运行时行为未验证。Linux 不再作为构建目标。`bundle:ab` 只按当前平台捆绑。
 - **adhoc 签名不可分发**：默认产物只能在本机运行，给别人会被 Gatekeeper 拦。正式分发需要自备证书并开启公证。
@@ -226,6 +253,9 @@ claude mcp add personae \
 src/main/
   cdp.ts          CDP 端口开启与发现、targetId 获取
   identity.ts     身份存档、窗口生命周期、导航栏 IPC
+  window-open.ts  window.open / target=_blank 的纯决策（有单测）
+  url-input.ts    地址栏输入 → URL 规范化（有单测）
+  toml.ts         Codex 配置的 TOML 段落拼接（有单测）
   agent-bridge.ts 本地 HTTP bridge + 发现文件
   mcp-setup.ts    Codex 配置一键写入
   index.ts        主进程入口与 IPC 注册
@@ -245,6 +275,8 @@ scripts/
   mcp-server.mjs           MCP server（stdio JSON-RPC）
   bundle-agent-browser.mjs 捆绑二进制与 core skill
   make-icons.mjs           SVG → PNG / icns / ico
+test/
+  *.test.ts                上述纯模块的 node:test 单测
 design/logo/
   icon.svg                 图标源文件（改这个，然后跑 pnpm icons）
   concept*.svg             设计过程中的备选概念稿

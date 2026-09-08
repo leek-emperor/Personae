@@ -65,6 +65,19 @@ The interface is in English by default. Use the **EN / 中** toggle in the top-r
 switch to Chinese; the choice is remembered and also applies to the toolbar inside each
 identity window and to the agent prompt you copy out.
 
+## Tests
+
+The tricky, mostly-undocumented decisions live in small pure modules so they can be
+locked down by tests. They run on `node:test` with no extra dependencies:
+
+```bash
+pnpm test
+```
+
+Covered: the `window.open` / popup decision (`window-open.ts`), address-bar URL
+normalization (`url-input.ts`), the Codex-config TOML splice (`toml.ts`), and the
+identity palette (`colors.ts`).
+
 Packaging:
 
 ```bash
@@ -136,6 +149,8 @@ Every tool takes an `identity` argument (name or id).
 
 When `click` / `fill` receive an `@eN` ref they automatically take a snapshot first, because **refs are only valid within a single agent-browser process** — reusing one across processes always fails with `Unknown ref`. For multi-step interactions, put them in one `act` batch.
 
+**Driving a popup child window.** When a page opens a popup (an OAuth sign-in, a share dialog…), that popup becomes a child window belonging to the same identity (see [Popups and OAuth](#popups-and-oauth)). It's a separate CDP target, listed under the identity in `list_identities` as `children`. Every acting/reading tool takes an optional `target` argument — pass a child's `targetId` (or its index) to drive the popup instead of the main window; omit it to drive the main window as before.
+
 ## Architecture
 
 ```
@@ -179,6 +194,19 @@ The goal is to wrap third-party pages in our own navigation UI **without** using
 
 Nested `BrowserWindow`s and `BrowserView` both work too, and the agent can drive all three (all verified). `WebContentsView` was chosen because `BrowserView` is marked `@deprecated` in Electron's type definitions, and because a nested window is a separate native window on macOS — dragging, resizing and minimizing would all need manual bounds syncing, which never quite feels like "one browser window".
 
+## Popups and OAuth
+
+A page can open a popup with `window.open(url, name, features)` — OAuth sign-ins, "share to…" dialogs, and so on. These need to be **real windows**: an OAuth popup relies on `window.opener` and `postMessage`/`window.close()` to hand the result back, so it can't be flattened into an in-page navigation without breaking the flow.
+
+The approach here treats a popup as a first-class child of its identity, without ever trying to guess "is this an OAuth window?":
+
+- **Same-window vs child.** A plain `<a target="_blank">` or a feature-less `window.open` stays an in-window navigation (no opener, no new target) — that's safe and keeps the "one identity, one main target" invariant. Only a `new-window`-disposition open (i.e. `window.open` with window features) becomes a real child window.
+- **Belongs to the identity.** The child is created with `parent` set to that identity's shell window and the **same partition**, so it floats over the right window and its cookies land in the right account. `window.opener` is preserved, so every OAuth style works. `outlivesOpener: false` means closing the identity closes its popups.
+- **Popup blocker (on by default).** The only thing distinguishing "should open" from "shouldn't" is **user activation** — was there a real click/keypress in the last second? This is exactly how mainstream browsers' popup blockers work: it never inspects the domain or content. Script-driven pop-unders (no preceding input) are blocked and surfaced as a quiet toast; you can turn the blocker off in the top bar.
+- **Agents can drive it.** Each child is a separate CDP target, resolved to its authoritative `targetId` and listed under the identity as `children`. Every MCP tool takes an optional `target` to address a specific popup. The "one main target per identity" contract for the outside world isn't broken — it's honestly extended to "one main plus tracked children".
+
+The decision itself (`same-window` / `allow-child` / `ignore`) lives in a pure function, `src/main/window-open.ts`, and is unit-tested.
+
 ## Things that bit us
 
 Kept here because most of them aren't documented anywhere.
@@ -216,8 +244,8 @@ Two more: on Retina displays `capturePage` outputs at devicePixelRatio (asking f
 ## Known limitations and security notes
 
 - **Isolation is a convention, not an architectural boundary.** The CDP port has no access control. It only listens on loopback with a random port, but any local process that connects can drive **every** identity, crossing partition boundaries. That's the direct cost of letting external agents attach. Don't handle sensitive accounts on a shared machine.
-- **All navigation is confined to the window.** `setWindowOpenHandler` turns `window.open` and `target="_blank"` into same-window navigation so that one identity always maps to one target. The cost is that **OAuth flows relying on popups break**.
-- **Each identity occupies 3 CDP page targets** (shell + top bar + content), so it scales at 3× the identity count.
+- **In-window navigation for ordinary links.** `setWindowOpenHandler` turns `window.open` and `target="_blank"` links into same-window navigation so that one identity always maps to one main target. Genuine popups (`window.open` with features, e.g. OAuth) are the exception — they open as tracked child windows; see [Popups and OAuth](#popups-and-oauth).
+- **Each identity occupies at least 3 CDP page targets** (shell + top bar + content), plus one more per open popup child, so it scales at roughly 3× the identity count.
 - **The bundled agent-browser version is pinned** at build time; upstream fixes are not picked up automatically.
 - **Runtime behaviour is only verified on macOS (arm64)**, including the packaged build. Windows packaging succeeds in CI (macOS + Windows are both built and produce installers), but the app has never actually been **run** on Windows, so runtime behaviour there is unverified. Linux is not a build target. `bundle:ab` bundles for the current platform only.
 - **Adhoc-signed builds are not distributable**: they run only on the build machine and are blocked by Gatekeeper elsewhere. Real distribution needs your own certificate and notarization.
@@ -229,6 +257,9 @@ Two more: on Retina displays `capturePage` outputs at devicePixelRatio (asking f
 src/main/
   cdp.ts          CDP port setup/discovery, targetId resolution
   identity.ts     identity storage, window lifecycle, nav-bar IPC
+  window-open.ts  pure decision for window.open / target=_blank (unit-tested)
+  url-input.ts    address-bar input → URL normalization (unit-tested)
+  toml.ts         TOML section splice for the Codex config (unit-tested)
   agent-bridge.ts local HTTP bridge + discovery file
   mcp-setup.ts    one-click Codex configuration
   index.ts        main entry and IPC registration
@@ -248,6 +279,8 @@ scripts/
   mcp-server.mjs           MCP server (stdio JSON-RPC)
   bundle-agent-browser.mjs bundles the binary and core skill
   make-icons.mjs           SVG → PNG / icns / ico
+test/
+  *.test.ts                node:test unit tests for the pure modules above
 design/logo/
   icon.svg                 icon source (edit this, then run pnpm icons)
   concept*.svg             alternative concepts from the design pass

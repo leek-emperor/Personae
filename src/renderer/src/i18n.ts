@@ -94,7 +94,15 @@ const zh = {
 
   // ── 其他 ──────────────────────────────────────────────
   writeFailed: '写入失败',
-  langLabel: '语言'
+  langLabel: '语言',
+
+  // ── 弹窗拦截 ──────────────────────────────────────────
+  popupBlocker: '弹窗拦截',
+  popupBlockerOn: '已开启',
+  popupBlockerOff: '已关闭',
+  popupBlockerHint:
+    '拦截网页脚本自动弹出的窗口（广告 / pop-under）。由你点击触发的弹窗（如 OAuth 登录）不受影响，会作为归属该身份的子窗口正常打开。',
+  popupBlocked: (host: string) => `已拦截来自 ${host} 的自动弹窗`
 }
 
 /** 英文表必须覆盖中文表的每一个 key，否则 typecheck 失败。 */
@@ -176,7 +184,14 @@ const en: Dict = {
   noTargets: '(no targets)',
 
   writeFailed: 'Write failed',
-  langLabel: 'Language'
+  langLabel: 'Language',
+
+  popupBlocker: 'Popup blocker',
+  popupBlockerOn: 'On',
+  popupBlockerOff: 'Off',
+  popupBlockerHint:
+    'Blocks windows opened automatically by page scripts (ads / pop-unders). Popups you trigger by clicking (e.g. an OAuth sign-in) are unaffected — they open as a child window belonging to that identity.',
+  popupBlocked: (host: string) => `Blocked an automatic popup from ${host}`
 }
 
 export const DICTS: Record<Lang, Dict> = { en, zh }

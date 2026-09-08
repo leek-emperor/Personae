@@ -262,8 +262,26 @@ async function resolveIdentity(identity) {
  *
  * 为什么不靠 title/url：多个身份常打开同一站点，两者完全相同。
  * 为什么不靠 index：CDP target 顺序与 tab index 顺序不一致，不能推算。
+ *
+ * child 参数：身份下由 window.open 弹出的子窗口（OAuth / 分享等）也是独立
+ * target，通过它的 targetId 直接寻址。不传则操作主内容区。
  */
-function tabRefOf(hit) {
+function tabRefOf(hit, child) {
+  if (child !== undefined && child !== null && child !== '') {
+    const kids = hit.children ?? []
+    // child 可以是 targetId 本身，或子窗口序号（0-based），或 1-based 序号
+    const byId = kids.find((c) => c.targetId === child)
+    if (byId) return byId.targetId
+    const idx = Number(child)
+    if (Number.isInteger(idx)) {
+      const k = kids[idx] ?? kids[idx - 1]
+      if (k?.targetId) return k.targetId
+    }
+    const list =
+      kids.map((c, i) => `  [${i}] ${c.targetId ?? '(pending)'} ${c.url ?? ''}`).join('\n') ||
+      '  （无子窗口）'
+    throw new Error(`身份「${hit.name}」下找不到子窗口「${child}」。当前子窗口：\n${list}`)
+  }
   if (!hit.targetId) {
     throw new Error(
       `身份「${hit.name}」还没有 targetId。\n` +
@@ -291,8 +309,8 @@ function q(s) {
  * 方法（实测报 "CDP error (Target.createTarget): Not supported"）。
  * 本项目靠权威 targetId 定位，本来也不依赖 pin 的粘性。
  */
-async function runOnIdentity(hit, actions, { needsRef = false } = {}) {
-  const ref = tabRefOf(hit)
+async function runOnIdentity(hit, actions, { needsRef = false, child } = {}) {
+  const ref = tabRefOf(hit, child)
   const cmds = [`tab ${ref}`]
   if (needsRef) cmds.push('snapshot -i --compact')
   cmds.push(...actions)
@@ -397,14 +415,25 @@ const tools = [
       const { identities } = await bridgeGet('/identities')
       if (!identities.length) return '当前没有任何身份，请在应用界面添加。'
       return identities
-        .map(
-          (i) =>
+        .map((i) => {
+          const base =
             `${i.isOpen ? '●' : '○'} ${i.name}\n` +
             `  id:        ${i.id}\n` +
             `  partition: ${i.partition}\n` +
             `  targetId:  ${i.targetId ?? '—（未打开）'}\n` +
             `  url:       ${i.url ?? '—'}`
-        )
+          const kids = i.children ?? []
+          if (!kids.length) return base
+          // 子窗口（OAuth/分享等弹窗）：agent 可用其 targetId 作为 target 参数单独操作
+          const childLines = kids
+            .map(
+              (c, idx) =>
+                `    [${idx}] targetId: ${c.targetId ?? '(pending)'}\n` +
+                `        url: ${c.url ?? '—'}`
+            )
+            .join('\n')
+          return `${base}\n  子窗口（弹窗，可作为 target 传给 snapshot/click 等工具）:\n${childLines}`
+        })
         .join('\n\n')
     }
   },
@@ -430,21 +459,25 @@ const tools = [
   {
     name: 'snapshot',
     description:
-      '读取指定身份窗口的可交互元素快照（accessibility tree + @eN refs）。会自动定位到该身份的窗口，不会读到别的身份。注意：ref 只在单次调用内有效，click/fill 等工具会各自重新 snapshot，因此你只需把「元素的可读名称」记住，让后续工具自己按名称定位；若要按 ref 操作，请用 act 工具在一次调用内完成。',
+      '读取指定身份窗口的可交互元素快照（accessibility tree + @eN refs）。会自动定位到该身份的窗口，不会读到别的身份。注意：ref 只在单次调用内有效，click/fill 等工具会各自重新 snapshot，因此你只需把「元素的可读名称」记住，让后续工具自己按名称定位；若要按 ref 操作，请用 act 工具在一次调用内完成。若要读该身份下弹出的子窗口（OAuth/分享等），传 target=子窗口的 targetId（见 list_identities）。',
     inputSchema: {
       type: 'object',
       properties: {
         identity: { type: 'string', description: '身份 id 或名称' },
-        compact: { type: 'boolean', description: '精简输出，默认 true' }
+        compact: { type: 'boolean', description: '精简输出，默认 true' },
+        target: {
+          type: 'string',
+          description: '可选：该身份下子窗口的 targetId 或序号，不传则操作主窗口'
+        }
       },
       required: ['identity'],
       additionalProperties: false
     },
-    handler: async ({ identity, compact = true }) => {
+    handler: async ({ identity, compact = true, target }) => {
       const hit = await resolveIdentity(identity)
       const cmd = compact ? 'snapshot -i --compact' : 'snapshot -i'
-      const { out } = await runOnIdentity(hit, [cmd])
-      return `[身份 ${hit.name}]\n\n${out}`
+      const { out } = await runOnIdentity(hit, [cmd], { child: target })
+      return `[身份 ${hit.name}${target ? ` · 子窗口 ${target}` : ''}]\n\n${out}`
     }
   },
   {
@@ -455,14 +488,15 @@ const tools = [
       type: 'object',
       properties: {
         identity: { type: 'string' },
-        url: { type: 'string' }
+        url: { type: 'string' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity', 'url'],
       additionalProperties: false
     },
-    handler: async ({ identity, url }) => {
+    handler: async ({ identity, url, target }) => {
       const hit = await resolveIdentity(identity)
-      const { out } = await runOnIdentity(hit, [`open ${q(url)}`])
+      const { out } = await runOnIdentity(hit, [`open ${q(url)}`], { child: target })
       return `[身份 ${hit.name}] 已导航到 ${url}\n${out.trim()}`
     }
   },
@@ -475,16 +509,17 @@ const tools = [
       properties: {
         identity: { type: 'string' },
         ref: { type: 'string', description: '@eN 形式的元素 ref' },
-        text: { type: 'string', description: '元素可读文本，如「百度一下」；与 ref 二选一' }
+        text: { type: 'string', description: '元素可读文本，如「百度一下」；与 ref 二选一' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity'],
       additionalProperties: false
     },
-    handler: async ({ identity, ref, text }) => {
+    handler: async ({ identity, ref, text, target }) => {
       if (!ref && !text) throw new Error('需要提供 ref 或 text 之一')
       const hit = await resolveIdentity(identity)
       const action = ref ? `click ${ref}` : `find text ${q(text)} click`
-      const { out } = await runOnIdentity(hit, [action], { needsRef: !!ref })
+      const { out } = await runOnIdentity(hit, [action], { needsRef: !!ref, child: target })
       return `[身份 ${hit.name}] 已点击 ${ref ?? text}\n${tailAfterSnapshot(out) || out.trim()}`
     }
   },
@@ -498,16 +533,17 @@ const tools = [
         identity: { type: 'string' },
         ref: { type: 'string', description: '@eN 形式的元素 ref' },
         label: { type: 'string', description: '输入框的 label 或占位文本；与 ref 二选一' },
-        text: { type: 'string', description: '要填入的内容' }
+        text: { type: 'string', description: '要填入的内容' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity', 'text'],
       additionalProperties: false
     },
-    handler: async ({ identity, ref, label, text }) => {
+    handler: async ({ identity, ref, label, text, target }) => {
       if (!ref && !label) throw new Error('需要提供 ref 或 label 之一')
       const hit = await resolveIdentity(identity)
       const action = ref ? `fill ${ref} ${q(text)}` : `find label ${q(label)} fill ${q(text)}`
-      const { out } = await runOnIdentity(hit, [action], { needsRef: !!ref })
+      const { out } = await runOnIdentity(hit, [action], { needsRef: !!ref, child: target })
       return `[身份 ${hit.name}] 已填入「${text}」\n${tailAfterSnapshot(out) || out.trim()}`
     }
   },
@@ -518,14 +554,15 @@ const tools = [
       type: 'object',
       properties: {
         identity: { type: 'string' },
-        key: { type: 'string' }
+        key: { type: 'string' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity', 'key'],
       additionalProperties: false
     },
-    handler: async ({ identity, key }) => {
+    handler: async ({ identity, key, target }) => {
       const hit = await resolveIdentity(identity)
-      const { out } = await runOnIdentity(hit, [`press ${key}`])
+      const { out } = await runOnIdentity(hit, [`press ${key}`], { child: target })
       return `[身份 ${hit.name}] 已按下 ${key}\n${out.trim()}`
     }
   },
@@ -541,15 +578,16 @@ const tools = [
           type: 'array',
           items: { type: 'string' },
           description: 'agent_browser 命令字符串数组，按顺序在同一进程内执行'
-        }
+        },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity', 'commands'],
       additionalProperties: false
     },
-    handler: async ({ identity, commands }) => {
+    handler: async ({ identity, commands, target }) => {
       const hit = await resolveIdentity(identity)
-      const { out } = await runOnIdentity(hit, commands)
-      return `[身份 ${hit.name}]\n${out}`
+      const { out } = await runOnIdentity(hit, commands, { child: target })
+      return `[身份 ${hit.name}${target ? ` · 子窗口 ${target}` : ''}]\n${out}`
     }
   },
   {
@@ -559,15 +597,16 @@ const tools = [
       type: 'object',
       properties: {
         identity: { type: 'string' },
-        ref: { type: 'string', description: '@eN ref 或 CSS 选择器' }
+        ref: { type: 'string', description: '@eN ref 或 CSS 选择器' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity', 'ref'],
       additionalProperties: false
     },
-    handler: async ({ identity, ref }) => {
+    handler: async ({ identity, ref, target }) => {
       const hit = await resolveIdentity(identity)
       const needsRef = ref.startsWith('@')
-      const { out } = await runOnIdentity(hit, [`get text ${q(ref)}`], { needsRef })
+      const { out } = await runOnIdentity(hit, [`get text ${q(ref)}`], { needsRef, child: target })
       return tailAfterSnapshot(out) || out.trim()
     }
   },
@@ -576,13 +615,16 @@ const tools = [
     description: '读取该身份窗口当前的 URL。',
     inputSchema: {
       type: 'object',
-      properties: { identity: { type: 'string' } },
+      properties: {
+        identity: { type: 'string' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
+      },
       required: ['identity'],
       additionalProperties: false
     },
-    handler: async ({ identity }) => {
+    handler: async ({ identity, target }) => {
       const hit = await resolveIdentity(identity)
-      const { out } = await runOnIdentity(hit, ['get url'])
+      const { out } = await runOnIdentity(hit, ['get url'], { child: target })
       return `[身份 ${hit.name}] ${out.trim()}`
     }
   },
@@ -593,14 +635,15 @@ const tools = [
       type: 'object',
       properties: {
         identity: { type: 'string' },
-        path: { type: 'string', description: '输出文件绝对路径，.png' }
+        path: { type: 'string', description: '输出文件绝对路径，.png' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity', 'path'],
       additionalProperties: false
     },
-    handler: async ({ identity, path }) => {
+    handler: async ({ identity, path, target }) => {
       const hit = await resolveIdentity(identity)
-      const { out } = await runOnIdentity(hit, [`screenshot ${q(path)}`])
+      const { out } = await runOnIdentity(hit, [`screenshot ${q(path)}`], { child: target })
       return `[身份 ${hit.name}] 截图已保存: ${path}\n${out.trim()}`
     }
   },
@@ -611,14 +654,15 @@ const tools = [
       type: 'object',
       properties: {
         identity: { type: 'string' },
-        expression: { type: 'string' }
+        expression: { type: 'string' },
+        target: { type: 'string', description: '可选：子窗口 targetId 或序号，不传则操作主窗口' }
       },
       required: ['identity', 'expression'],
       additionalProperties: false
     },
-    handler: async ({ identity, expression }) => {
+    handler: async ({ identity, expression, target }) => {
       const hit = await resolveIdentity(identity)
-      const { out } = await runOnIdentity(hit, [`eval ${q(expression)}`])
+      const { out } = await runOnIdentity(hit, [`eval ${q(expression)}`], { child: target })
       return `[身份 ${hit.name}] ${out.trim()}`
     }
   }
