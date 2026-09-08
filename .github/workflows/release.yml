@@ -329,7 +329,9 @@ jobs:
       # 仍只引用 registry.npmjs.org 的包，用户现有 npx 安装命令不变。
       - name: 镜像 npm launcher 到 GitHub Packages
         working-directory: packages/personae-mcp
-        run: npm publish --registry=https://npm.pkg.github.com
+        run: |
+          printf '%s\n' "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> "${NPM_CONFIG_USERCONFIG}"
+          npm publish --registry=https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
