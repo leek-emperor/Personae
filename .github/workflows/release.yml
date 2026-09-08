@@ -40,6 +40,7 @@ on:
 # 允许创建 release 和上传附件
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -275,3 +276,52 @@ jobs:
 
           echo "✓ 已创建草稿 release：$TAG"
           echo "到 Releases 页面确认内容后手动点 Publish。"
+
+  # ── 发布 npm launcher 并登记官方 MCP Registry ─────────────────────
+  # Registry 只托管元数据，必须先把可安装的 stdio launcher 发到 npm。
+  # NPM_TOKEN 由仓库管理员设置；Registry 身份验证使用 GitHub OIDC，不需要
+  # 额外的 MCP token。
+  publish-mcp:
+    needs: [prepare, build, release]
+    if: ${{ inputs.release && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 同步 registry metadata 与 npm launcher
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          pnpm version "$VERSION" --no-git-tag-version --allow-same-version
+          pnpm mcp:sync
+          pnpm mcp:check
+
+      - name: 发布 npm launcher
+        working-directory: packages/personae-mcp
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 安装 mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: 通过 GitHub OIDC 登录 MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: 发布 MCP Registry metadata
+        run: ./mcp-publisher publish
