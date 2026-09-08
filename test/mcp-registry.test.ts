@@ -61,7 +61,7 @@ test('release workflow mirrors the launcher to public GitHub Packages', () => {
   assert.match(workflow, /registry-url: https:\/\/npm.pkg.github.com/)
   assert.match(workflow, /scope: '@leek-emperor'/)
   assert.match(workflow, /npm publish/)
-  assert.match(workflow, /visibility=public/)
+  assert.doesNotMatch(workflow, /将 GitHub Package 设为公开/)
 })
 
 test('release workflow skips an existing npm version so it can repair secondary publishing', () => {
